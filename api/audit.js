@@ -64,26 +64,43 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     required: ["introducao","elementos","fotos","ressalvas"]
   };
 
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseJsonSchema: schema,
-          maxOutputTokens: 3600
-        }
-      })
-    });
+  const payload = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseJsonSchema: schema,
+      maxOutputTokens: 3600
+    }
+  });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Erro na API Gemini');
+  // Lista com modelos alternativos se um estiver com alta demanda
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash"
+  ];
 
-    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    res.status(200).json(JSON.parse(resultText));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  let lastError = "";
+
+  for (const model of models) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+
+      const data = await response.json();
+      if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const resultText = data.candidates[0].content.parts[0].text;
+        return res.status(200).json(JSON.parse(resultText));
+      }
+
+      lastError = data.error?.message || `Erro HTTP ${response.status} no modelo ${model}`;
+    } catch (err) {
+      lastError = err.message;
+    }
   }
+
+  res.status(500).json({ error: `Servidores do Gemini ocupados no momento: ${lastError}` });
 }
