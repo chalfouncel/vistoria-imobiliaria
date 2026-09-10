@@ -73,10 +73,9 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     }
   });
 
-  // Lista com modelos alternativos se um estiver com alta demanda
+  // Modelos ativos e estáveis para a conta
   const models = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.6-flash",
     "gemini-3.8-flash"
   ];
 
