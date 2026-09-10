@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Vistoria Fácil Pro v40.1 — Gemini corrigido</title>
-<!-- Bibliotecas com fallback local -->
+<title>Vistoria Fácil Pro — M&IC</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
@@ -158,7 +157,6 @@
   .vistoria-tipo-card span { display:block; font-size:.72rem; color:#6c757d; margin-top:3px; }
   .vistoria-tipo-card:has(input:checked) { border-color:#c59b27; background:#fff8df; box-shadow:0 0 0 1px #c59b27 inset; }
   .laudo-meta-box .clicksign-inline { white-space:nowrap; display:block; font-size:6.8pt; }
-
 </style>
 </head>
 <body>
@@ -169,27 +167,6 @@
 </header>
 
 <div class="container">
-
-  <!-- CONFIGURAÇÃO DA CHAVE GEMINI (Pré-instalada com a chave do usuário) -->
-  <div class="card" style="padding: 10px 16px; background: #fffbe6; border-color: #ffe58f;">
-    <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleApiKey()">
-      <span style="font-size:0.84rem; font-weight:bold; color:#856404;">⚙ Chave Gemini API (Nativamente configurada)</span>
-      <span style="font-size:0.8rem; color:#856404;">▼</span>
-    </div>
-    <div id="apiKeySection" style="display:none; margin-top:10px;">
-      <p style="font-size:0.75rem; color:#666;">Chave Gemini API:</p>
-      <input type="password" id="geminiApiKey" value="" placeholder="Cole sua chave Gemini aqui" style="margin-top:4px;">
-      <button class="btn btn-primary" style="padding:8px; font-size:0.82rem; margin-top:6px;" onclick="saveApiKey()">Salvar Chave no Celular</button>
-      <button class="btn btn-next" style="padding:8px; font-size:0.82rem; margin-top:6px;" onclick="testGeminiConnection()">Testar conexão com Gemini</button>
-      <div id="geminiConnectionStatus" style="font-size:0.68rem;color:#777;margin-top:5px;line-height:1.35;"></div>
-      <hr style="margin:14px 0; border:0; border-top:1px solid #eee;">
-      <p style="font-size:0.75rem; color:#666; margin-bottom:5px;"><strong>IA auxiliar OpenAI (opcional)</strong> — somente se o Gemini falhar.</p>
-      <input type="password" id="openaiApiKey" placeholder="Chave da API OpenAI (opcional)" style="margin-top:4px;">
-      <input type="text" id="openaiModel" value="gpt-5.6-luna" placeholder="Modelo OpenAI" style="margin-top:5px;">
-      <button class="btn btn-secondary" style="padding:8px; font-size:0.82rem; margin-top:6px;" onclick="saveOpenAIKey()">Salvar IA auxiliar</button>
-      <div style="font-size:0.68rem;color:#777;margin-top:5px;line-height:1.35;">A API OpenAI tem cobrança separada do ChatGPT. Sem chave, ela permanece desligada.</div>
-    </div>
-  </div>
 
   <!-- ETAPA 1: CONTRATO -->
   <div id="step-contract" class="step active">
@@ -252,17 +229,14 @@
         <label>Data da Vistoria:</label>
         <input type="date" id="dataVistoria">
 
-        <!-- Dados de contestação: mantidos no DOM para extração automática e uso no relatório final.
-             Ocultos da tela inicial para manter a interface limpa. -->
         <input type="hidden" id="emailContestacao" value="">
         <input type="hidden" id="prazoContestacao" value="">
         <input type="hidden" id="marcoContestacao" value="">
         <textarea id="textoContestacao" hidden></textarea>
         <textarea id="clausulaContestacaoOriginal" hidden></textarea>
-</div>
-
-        <button class="btn btn-primary" onclick="goToStepRooms()">Prosseguir para Ambientes ➔</button>
       </div>
+
+      <button class="btn btn-primary" onclick="goToStepRooms()">Prosseguir para Ambientes ➔</button>
     </div>
   </div>
 
@@ -349,70 +323,8 @@
 <div id="pdfTemplateWrapper"></div>
 
 <script>
-  function toggleApiKey() {
-    var el = document.getElementById('apiKeySection');
-    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
-  }
-  function saveApiKey() {
-    var key = document.getElementById('geminiApiKey').value.trim();
-    if (key) {
-      localStorage.setItem('GEMINI_API_KEY', key);
-      alert('Chave API salva com sucesso!');
-      toggleApiKey();
-    }
-  }
   window.addEventListener('DOMContentLoaded', function() {
-    var savedKey = localStorage.getItem('GEMINI_API_KEY') || "";
-    document.getElementById('geminiApiKey').value = savedKey;
     document.getElementById('dataVistoria').valueAsDate = new Date();
-  });
-  async function testGeminiConnection() {
-    var key = (localStorage.getItem('GEMINI_API_KEY') || document.getElementById('geminiApiKey').value || '').trim();
-    var status = document.getElementById('geminiConnectionStatus');
-    if (!key) {
-      status.textContent = 'Informe e salve a chave Gemini primeiro.';
-      status.style.color = '#dc3545';
-      return;
-    }
-
-    status.textContent = 'Testando conexão...';
-    status.style.color = '#007bff';
-
-    try {
-      var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash?key=' + encodeURIComponent(key);
-      var controller = new AbortController();
-      var timer = setTimeout(function(){ controller.abort(); }, 15000);
-      var res = await fetch(url, { method:'GET', mode:'cors', cache:'no-store', signal:controller.signal });
-      clearTimeout(timer);
-      var txt = await res.text();
-      if (!res.ok) {
-        var j = {}; try { j = JSON.parse(txt); } catch(e) {}
-        throw new Error((j.error && j.error.message) || ('HTTP ' + res.status));
-      }
-      status.textContent = '✓ Conexão com Gemini funcionando neste navegador.';
-      status.style.color = '#28a745';
-    } catch(e) {
-      if (e && e.name === 'AbortError') {
-        status.textContent = '✕ Tempo limite. Verifique internet e acesso à API Gemini.';
-      } else {
-        status.textContent = '✕ Falha: ' + (e.message || String(e));
-      }
-      status.style.color = '#dc3545';
-    }
-  }
-
-  function saveOpenAIKey() {
-    var key = document.getElementById('openaiApiKey').value.trim();
-    var model = document.getElementById('openaiModel').value.trim() || 'gpt-5.6-luna';
-    if (key) localStorage.setItem('OPENAI_API_KEY', key); else localStorage.removeItem('OPENAI_API_KEY');
-    localStorage.setItem('OPENAI_MODEL', model);
-    alert('Configuração da IA auxiliar salva.');
-  }
-  window.addEventListener('DOMContentLoaded', function() {
-    var ok = localStorage.getItem('OPENAI_API_KEY') || '';
-    var om = localStorage.getItem('OPENAI_MODEL') || 'gpt-5.6-luna';
-    document.getElementById('openaiApiKey').value = ok;
-    document.getElementById('openaiModel').value = om;
   });
 
   document.querySelectorAll('.checkbox-card input').forEach(function(input) {
@@ -422,9 +334,6 @@
     if(input.checked) input.parentElement.classList.add('checked');
   });
 
-  // =========================================================================
-  // DECODIFICADOR EXCLUSIVO DE ENDEREÇO (GLIFOS MACROMAN/WINANSI)
-  // =========================================================================
   function decodeAddressOnly(text) {
     if (!text) return "";
     var s = text;
@@ -447,30 +356,23 @@
     return s.replace(/\s+/g, ' ').trim();
   }
 
-  // =========================================================================
-  // VALIDADOR CIRÚRGICO DE NOME (IGNORA DATAS, CPFs E METADADOS CLICKSIGN)
-  // =========================================================================
   function isValidPersonName(str) {
     if (!str) return false;
     var s = str.trim();
     var sNorm = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    // 1. Rejeita se for data numérica ou com mês por extenso (ex: "06 set 2026", "06/09/2026", "set 2026")
     var monthRegex = /\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez|janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/i;
     if (monthRegex.test(sNorm) && /\d/.test(s)) return false;
     if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/.test(s)) return false;
     if (/^\d{1,2}\s+[a-z]{3,9}\s+\d{2,4}/i.test(sNorm)) return false;
 
-    // 2. Rejeita se for horário, IP, CPF, Hash, E-mail ou metadado
     if (s.indexOf('@') !== -1) return false;
     if (sNorm.indexOf("cpf") !== -1 || sNorm.indexOf("cnpj") !== -1 || sNorm.indexOf("rg") !== -1) return false;
     if (sNorm.indexOf("hash") !== -1 || sNorm.indexOf("ip:") !== -1 || sNorm.indexOf("token") !== -1) return false;
     if (sNorm.indexOf("assinou") !== -1 || sNorm.indexOf("autenticado") !== -1 || sNorm.indexOf("clicksign") !== -1) return false;
-    if (/^\d+$/.test(s.replace(/[\.\-\s\/]/g, ''))) return false; // apenas números
+    if (/^\d+$/.test(s.replace(/[\.\-\s\/]/g, ''))) return false;
 
-    // 3. Deve conter ao menos uma sequência de letras válida de nome
     if (!/[A-Za-zÀ-Úà-ú]{3,}/.test(s)) return false;
-
     return true;
   }
 
@@ -489,9 +391,6 @@
     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   }
 
-  // =======================================================
-  // LEITURA DO CONTRATO
-  // =======================================================
   var contractInput = document.getElementById('contractFile');
   contractInput.addEventListener('change', async function(e) {
     var file = e.target.files[0];
@@ -518,9 +417,7 @@
           var str = textContent.items[i].str;
           if (str && str.trim().length > 0) {
             allRawLines.push(str.trim());
-            if (p === 1) {
-              page1RawLines.push(str.trim());
-            }
+            if (p === 1) page1RawLines.push(str.trim());
           }
         }
       }
@@ -597,7 +494,6 @@
       document.getElementById('dataTermino').value = toIso(dateMatches[1]);
     }
 
-    var emailMatches = allText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || [];
     var clause = extractContestacaoClause(allText);
     var clauseEmails = clause.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || [];
     var emailContestacao = clauseEmails[0] || "";
@@ -625,69 +521,40 @@
 
   function extractContestacaoClause(fullText) {
     if (!fullText) return "";
-
-    // REGRA DEFINITIVA:
-    // Capturar SOMENTE o parágrafo contratual que começa pela expressão
-    // "Após a entrega das chaves..." e termina imediatamente antes de
-    // "E, por estarem, assim, justos e contratados...".
-    // O conteúdo retornado é o texto contratual, sem resumo, sem reescrita
-    // e sem substituição de palavras.
     var compact = String(fullText).replace(/\s+/g, ' ').trim();
-
-    // Primeiro, localizamos o bloco do "LAUDO FOTOGRÁFICO...".
     var headingRe = /LAUDO\s+FOTOGR[AÁÀÂÃÄ]FICO\s+DE\s+VISTORIA\s+PARA\s+FINS\s+DE\s+LOCA[CÇ]ÃO/i;
     var headingMatch = headingRe.exec(compact);
     if (!headingMatch) return "";
 
     var section = compact.substring(headingMatch.index + headingMatch[0].length).trim();
-
-    // Âncora principal solicitada: a frase exata usada no contrato.
-    // O fallback mantém compatibilidade com contratos que usam "inquilino".
     var startRe = /Ap[oó]s\s+a\s+entrega\s+das\s+chaves,\s+o\s+(?:LOCAT[AÁÀÂÃÄ]RIO|inquilino)\s+pode\s+enviar\s+as\s+suas\s+observa[cç][oõ]es\s+ao\s+lado\s+num\s+prazo\s+de/i;
     var startMatch = startRe.exec(section);
 
-    // Último fallback: encontra "Após a entrega das chaves" sem depender
-    // do restante da frase, mas ainda exige que haja um e-mail no parágrafo.
     if (!startMatch) {
       var fallbackRe = /Ap[oó]s\s+a\s+entrega\s+das\s+chaves/i;
       startMatch = fallbackRe.exec(section);
     }
     if (!startMatch) return "";
 
-    // O parágrafo termina antes do parágrafo seguinte de assinatura.
     var tail = section.substring(startMatch.index);
     var endRe = /\s+E,?\s*por\s+estarem,?\s+assim,?\s+justos\s+e\s+contratados\b/i;
     var endMatch = endRe.exec(tail);
-    var paragraph = endMatch
-      ? tail.substring(0, endMatch.index).trim()
-      : tail.split(/\s+Rio de Janeiro,\s*/i)[0].trim();
+    var paragraph = endMatch ? tail.substring(0, endMatch.index).trim() : tail.split(/\s+Rio de Janeiro,\s*/i)[0].trim();
 
-    // Exigimos que o parágrafo contenha o e-mail, prazo e a frase de abertura.
-    // Isso impede que outra parte do contrato seja confundida com a contestação.
     var hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(paragraph);
     var hasPrazo = /\b\d{1,3}\s*(?:\(\s*\d{1,3}\s*\))?\s*dias?\b/i.test(paragraph);
     if (!hasEmail || !hasPrazo || paragraph.length < 40) return "";
-
     return paragraph;
   }
 
   function extractContestacaoDeadline(clause) {
     var result = { prazo: "", marco: "" };
     if (!clause) return result;
-
-    // Aceita prazo escrito em algarismos ou por extenso e captura "dias úteis"
-    // / "dias corridos" sem depender de uma única redação contratual.
     var m = clause.match(/\b(\d{1,3}|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|quinze|vinte|trinta)\s*(?:\(\s*\d{1,3}\s*\))?\s*(dias?|d\.)\s*([a-záéíóúâêôãõç]+)?\b/i);
-    if (m) {
-      result.prazo = (m[1] + ' ' + m[2] + (m[3] ? ' ' + m[3] : '')).trim();
-    }
+    if (m) result.prazo = (m[1] + ' ' + m[2] + (m[3] ? ' ' + m[3] : '')).trim();
 
     var lower = cleanSearch(clause);
-    var markers = [
-      'apos a entrega das chaves', 'apos entrega das chaves',
-      'a partir da entrega das chaves', 'a contar da entrega das chaves',
-      'a partir da disponibilizacao das chaves', 'a contar da disponibilizacao das chaves'
-    ];
+    var markers = ['apos a entrega das chaves', 'apos entrega das chaves', 'a partir da entrega das chaves', 'a contar da entrega das chaves', 'a partir da disponibilizacao das chaves', 'a contar da disponibilizacao das chaves'];
     for (var i = 0; i < markers.length; i++) {
       var idx = lower.indexOf(cleanSearch(markers[i]));
       if (idx !== -1) {
@@ -698,33 +565,25 @@
     return result;
   }
 
-  // Volta até 8 linhas anteriores a "Assinou como..." ignorando datas, horários e CPFs
   function findTrueSignerAbove(lines, index) {
     for (var j = index - 1; j >= Math.max(0, index - 8); j--) {
       var candidate = lines[j].trim();
-      if (isValidPersonName(candidate)) {
-        return cleanName(candidate);
-      }
+      if (isValidPersonName(candidate)) return cleanName(candidate);
     }
     return "";
   }
 
   function extractAddressAfterSituado(text) {
     if (!text) return "";
-
     var normText = cleanSearch(text);
     var indexSituado = normText.indexOf("situado");
 
     if (indexSituado !== -1) {
       var afterSituado = text.substring(indexSituado + 7).trim();
       afterSituado = afterSituado.replace(/^(?:na|no|à|a|em|:)\s+/i, '').trim();
-
       var addressCandidate = afterSituado.split(/[;\.\r\n]/)[0].trim();
       addressCandidate = addressCandidate.replace(/(?:,?\s*destinado\s+exclusivamente|para\s+fins\s+residenciais|conforme).*/i, '').trim();
-
-      if (addressCandidate.length > 5) {
-        return addressCandidate;
-      }
+      if (addressCandidate.length > 5) return addressCandidate;
     }
 
     var indexImovel = normText.indexOf("imovel:");
@@ -733,7 +592,6 @@
       var addr = afterImov.split(/[;\.\r\n]/)[0].trim();
       return addr.replace(/(?:destinado|para\s+fins).*/i, '').trim();
     }
-
     return "";
   }
 
@@ -745,16 +603,12 @@
     }
   }
 
-
   function goToStepRooms() {
     document.getElementById('step-contract').classList.remove('active');
     document.getElementById('step-rooms').classList.add('active');
     window.scrollTo(0, 0);
   }
 
-  // ==========================================
-  // ETAPA DE FOTOS & CÔMODOS
-  // ==========================================
   var selectedRooms = [];
   var currentRoomIndex = 0;
   var roomsData = {};
@@ -846,14 +700,14 @@
       var img = new Image();
       img.onload = function() {
         var canvas = document.createElement('canvas');
-        var MAX_WIDTH = 1800;
+        var MAX_WIDTH = 1200;
         var scaleSize = MAX_WIDTH / img.width;
         canvas.width = (img.width > MAX_WIDTH) ? MAX_WIDTH : img.width;
         canvas.height = (img.width > MAX_WIDTH) ? img.height * scaleSize : img.height;
 
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
         var room = selectedRooms[currentRoomIndex];
         roomsData[room].photos.push(dataUrl);
@@ -872,21 +726,48 @@
     }
   }
 
-  // =========================================================================
-  // AUDITORIA PERICIAL — UMA CHAMADA POR CÔMODO
-  // Todas as fotos do mesmo ambiente são enviadas juntas.
-  // =========================================================================
+  async function callGeminiPericialIndividual(roomName, photosDataUrls) {
+    var response = await fetch('/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomName: roomName, photosDataUrls: photosDataUrls })
+    });
+
+    if (!response.ok) {
+      var errData = await response.json().catch(function(){ return {}; });
+      throw new Error(errData.error || ('Erro no servidor HTTP ' + response.status));
+    }
+
+    var result = await response.json();
+    return normalizeRoomResult(result, roomName, photosDataUrls.length);
+  }
+
+  function normalizeRoomResult(obj, roomName, photoCount) {
+    obj = obj || {};
+    var fs = Array.isArray(obj.fotos) ? obj.fotos : [];
+    var fotos = [];
+    for (var i = 0; i < photoCount; i++) {
+      var f = fs[i] || {};
+      fotos.push({
+        titulo: String(f.titulo || ('Registro ' + (i + 1) + ' — ' + roomName)).trim(),
+        descricao: String(f.descricao || 'Não foi possível produzir descrição conclusiva desta fotografia.').trim(),
+        avaria: f.avaria === true
+      });
+    }
+    var els = Array.isArray(obj.elementos) ? obj.elementos : [];
+    return {
+      introducao: String(obj.introducao || ('Análise fotográfica do ambiente ' + roomName + '.')).trim(),
+      elementos: els.length ? els : [{ elemento: 'Registro visual', descricao: 'Constatações limitadas ao que é identificável nas fotografias.', funcionamento: 'Não verificável por fotografia', classificacao: 'NÃO CONCLUSIVO' }],
+      fotos: fotos,
+      ressalvas: String(obj.ressalvas || 'A análise é estritamente visual e não substitui testes presenciais de funcionamento, medições ou ensaios técnicos.').trim()
+    };
+  }
+
   async function startGeminiAuditAndPdf() {
-    var apiKey = (localStorage.getItem('GEMINI_API_KEY') || document.getElementById('geminiApiKey').value || '').trim();
     var btnFinish = document.getElementById('btnFinish');
     var aiLoader = document.getElementById('aiLoader');
     var aiText = document.getElementById('aiLoaderText');
 
-    if (!apiKey) {
-      alert('Configure a chave da API Gemini antes de gerar o laudo.');
-      toggleApiKey();
-      return;
-    }
     if (!selectedRooms || !selectedRooms.length) {
       alert('Nenhum ambiente foi selecionado.');
       return;
@@ -908,8 +789,8 @@
       for (var i = 0; i < selectedRooms.length; i++) {
         var room = selectedRooms[i];
         var photos = roomsData[room].photos;
-        if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' — ' + photos.length + ' foto(s) juntas (' + (i + 1) + '/' + selectedRooms.length + ')...';
-        roomsData[room].aiAnalysis = await callGeminiPericialIndividual(apiKey, room, photos);
+        if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
+        roomsData[room].aiAnalysis = await callGeminiPericialIndividual(room, photos);
       }
 
       if (aiText) aiText.innerText = 'Todas as análises foram concluídas. Gerando o PDF...';
@@ -917,221 +798,11 @@
 
     } catch (e) {
       console.error('Falha na geração do laudo:', e);
-      var msg = e && e.message ? e.message : String(e);
-      var useFallback = confirm('A análise com IA não foi concluída.\n\nMotivo:\n' + msg + '\n\nOK = gerar o PDF mesmo assim, identificando claramente que a análise de IA falhou.\nCancelar = interromper e corrigir o problema.');
-      if (useFallback) {
-        selectedRooms.forEach(function(room) {
-          if (!roomsData[room].aiAnalysis) {
-            roomsData[room].aiAnalysis = normalizeRoomResult({}, room, roomsData[room].photos.length);
-          }
-        });
-        if (aiText) aiText.innerText = 'Gerando PDF sem análise de IA para os ambientes que falharam...';
-        await renderAndGeneratePdf();
-      }
+      alert('Ocorreu uma falha na análise pela IA:\n' + (e.message || String(e)));
     } finally {
       btnFinish.disabled = false;
       btnFinish.style.opacity = '1';
       aiLoader.style.display = 'none';
-    }
-  }
-
-  async function geminiGenerateJson(apiKey, parts) {
-    /*
-     * CHAMADA GEMINI ROBUSTA PARA NAVEGADOR
-     *
-     * O app pode ser aberto como arquivo local (content:// / file://).
-     * Para reduzir problemas de preflight, a chave vai na URL (?key=)
-     * em vez do cabeçalho x-goog-api-key. A API REST oficial aceita esse
-     * formato e o endpoint generateContent continua sendo usado.
-     *
-     * Também há timeout, diagnóstico específico e fallback de modelos.
-     */
-    if (!apiKey) throw new Error('Chave Gemini não configurada.');
-
-    var schema = {
-      type: "object",
-      properties: {
-        introducao: { type: "string" },
-        elementos: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              elemento: { type: "string" },
-              descricao: { type: "string" },
-              funcionamento: { type: "string" },
-              classificacao: { type: "string" }
-            },
-            required: ["elemento","descricao","funcionamento","classificacao"]
-          }
-        },
-        fotos: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              titulo: { type: "string" },
-              descricao: { type: "string" },
-              avaria: { type: "boolean" }
-            },
-            required: ["titulo","descricao","avaria"]
-          }
-        },
-        ressalvas: { type: "string" }
-      },
-      required: ["introducao","elementos","fotos","ressalvas"]
-    };
-
-    var requestBody = JSON.stringify({
-      contents: [{ parts: parts }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseJsonSchema: schema,
-        thinkingConfig: { thinkingLevel: "low" },
-        maxOutputTokens: 3600
-      }
-    });
-
-    /* Modelos oficiais atualmente disponíveis. O primeiro é o principal. */
-    var models = [
-      "gemini-3.8-flash",
-      "gemini-3.7-flash",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash-lite"
-    ];
-
-    var lastError = "";
-
-    for (var m = 0; m < models.length; m++) {
-      var modelName = models[m];
-      var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
-                encodeURIComponent(modelName) + ":generateContent?key=" +
-                encodeURIComponent(apiKey);
-
-      var controller = new AbortController();
-      var timeoutId = setTimeout(function(){ controller.abort(); }, 90000);
-
-      try {
-        var res = await fetch(url, {
-          method: 'POST',
-          mode: 'cors',
-          cache: 'no-store',
-          headers: { 'Content-Type': 'application/json' },
-          body: requestBody,
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        var responseText = await res.text();
-        var data = {};
-        try { data = responseText ? JSON.parse(responseText) : {}; } catch(parseErr) {}
-
-        if (!res.ok) {
-          var apiMessage = data && data.error && data.error.message
-            ? data.error.message
-            : responseText || ('HTTP ' + res.status);
-          lastError = 'Gemini ' + modelName + ' — HTTP ' + res.status + ': ' + apiMessage;
-          continue;
-        }
-
-        var c = data && data.candidates && data.candidates[0];
-        if (!c || !c.content || !c.content.parts) {
-          lastError = 'Gemini ' + modelName + ' retornou uma resposta sem conteúdo.';
-          continue;
-        }
-
-        var raw = c.content.parts.map(function(p){ return p.text || ''; }).join('').trim();
-        if (!raw) {
-          lastError = 'Gemini ' + modelName + ' retornou resposta vazia.';
-          continue;
-        }
-
-        try {
-          return JSON.parse(raw);
-        } catch (jsonErr) {
-          lastError = 'Gemini ' + modelName + ' retornou JSON inválido: ' + jsonErr.message;
-          continue;
-        }
-
-      } catch(e) {
-        clearTimeout(timeoutId);
-
-        if (e && e.name === 'AbortError') {
-          lastError = 'Gemini ' + modelName + ': tempo limite de 90 segundos excedido.';
-        } else if (e && e.name === 'TypeError') {
-          lastError = 'Falha de conexão/CORS ao acessar a Gemini. ' +
-            'Se o aplicativo estiver aberto como content:// ou file://, abra-o em uma página HTTPS ou use o modo servidor. Detalhe: ' +
-            (e.message || 'Failed to fetch');
-        } else {
-          lastError = 'Gemini ' + modelName + ': ' + (e.message || String(e));
-        }
-      }
-    }
-
-    throw new Error(lastError || 'Nenhum modelo Gemini conseguiu concluir a análise.');
-  }
-
-  function normalizeRoomResult(obj, roomName, photoCount) {
-    obj=obj||{};
-    var fs=Array.isArray(obj.fotos)?obj.fotos:[];
-    var fotos=[];
-    for(var i=0;i<photoCount;i++){
-      var f=fs[i]||{};
-      fotos.push({titulo:String(f.titulo||('Registro '+(i+1)+' — '+roomName)).trim(),descricao:String(f.descricao||'Não foi possível produzir descrição conclusiva desta fotografia.').trim(),avaria:f.avaria===true});
-    }
-    var els=Array.isArray(obj.elementos)?obj.elementos:[];
-    return {introducao:String(obj.introducao||('Análise fotográfica do ambiente '+roomName+'.')).trim(),elementos:els.length?els:[{elemento:'Registro visual',descricao:'Constatações limitadas ao que é identificável nas fotografias.',funcionamento:'Não verificável por fotografia',classificacao:'NÃO CONCLUSIVO'}],fotos:fotos,ressalvas:String(obj.ressalvas||'A análise é estritamente visual e não substitui testes presenciais de funcionamento, medições ou ensaios técnicos.').trim()};
-  }
-
-  async function callOpenAIBackup(apiKey, model, roomName, photosDataUrls) {
-    var content=[{type:'input_text',text:'Analise TODAS as fotografias do ambiente "'+roomName+'" juntas para um laudo de vistoria imobiliária. Responda SOMENTE JSON válido. Faça uma descrição específica para cada foto, na ordem recebida, sem inventar funcionamento, medidas, materiais ou avarias. Formato: {"introducao":"...","elementos":[{"elemento":"...","descricao":"...","funcionamento":"Não verificável por fotografia","classificacao":"BOM ESTADO APARENTE ou REGULAR/ATENÇÃO ou AVARIA VISÍVEL ou NÃO CONCLUSIVO"}],"fotos":[{"titulo":"...","descricao":"...","avaria":false}],"ressalvas":"..."}. Deve haver exatamente '+photosDataUrls.length+' itens em fotos.'}];
-    photosDataUrls.forEach(function(dataUrl){content.push({type:'input_image',image_url:dataUrl});});
-    var res=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},body:JSON.stringify({model:model||'gpt-5.6-luna',input:[{role:'user',content:content}],max_output_tokens:6000})});
-    var data=await res.json().catch(function(){return {};});
-    if(!res.ok) throw new Error((data.error&&data.error.message)||('OpenAI HTTP '+res.status));
-    var text=data.output_text||'';
-    if(!text&&data.output){data.output.forEach(function(item){(item.content||[]).forEach(function(c){if(c.text)text+=c.text;});});}
-    if(!text) throw new Error('OpenAI respondeu sem conteúdo.');
-    return JSON.parse(text.replace(/```json/gi,'').replace(/```/g,'').trim());
-  }
-
-  async function callGeminiPericialIndividual(apiKey, roomName, photosDataUrls) {
-    if(!photosDataUrls || !photosDataUrls.length) throw new Error('O ambiente '+roomName+' não possui fotografias.');
-    var aiText=document.getElementById('aiLoaderText');
-    if(aiText) aiText.innerText='Gemini analisando '+roomName+' — '+photosDataUrls.length+' foto(s) em uma única análise...';
-
-    var prompt =
-      'Você é perito de vistoria imobiliária. Analise TODAS as fotos do ambiente "'+roomName+'" em conjunto. ' +
-      'Compare as imagens, mas descreva cada foto apenas pelo que está visível nela. ' +
-      'Não invente funcionamento, medidas, marcas, materiais, cores exatas ou avarias. ' +
-      'Não trate sombra, reflexo ou sujeira como dano sem evidência. ' +
-      'Quando funcionamento não puder ser testado, escreva "Não verificável por fotografia". ' +
-      'A coluna DESCRIÇÃO E ESTADO DE CONSERVAÇÃO é a parte principal do laudo e deve ser detalhada. ' +
-      'Para cada elemento visível, descreva objetivamente estado de conservação, acabamento aparente, integridade, desgaste, manchas, riscos, fissuras, descascamentos, deformações, peças ausentes, sujeira relevante e outros sinais visuais quando realmente identificáveis. ' +
-      'Relacione a descrição ao que efetivamente aparece nas fotografias do ambiente, sem inventar informações fora do campo visual. ' +
-      'Na introdução e nos elementos, consolide as evidências visuais das fotos do ambiente, evitando descrições genéricas. ' +
-      'Cada foto deve ter uma descrição específica, técnica, detalhada e não repetitiva, destacando os elementos efetivamente enquadrados. ' +
-      'Retorne exatamente '+photosDataUrls.length+' itens em fotos, na ordem recebida. ' +
-      'Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou NÃO CONCLUSIVO.';
-
-    var parts=[{text:prompt}];
-    photosDataUrls.forEach(function(dataUrl,idx){
-      var b64=dataUrl.split(',')[1];
-      if(!b64) throw new Error('Foto '+(idx+1)+' inválida.');
-      parts.push({text:'FOTO '+(idx+1)+' DE '+photosDataUrls.length});
-      parts.push({inlineData:{mimeType:'image/jpeg',data:b64}});
-    });
-
-    try {
-      return normalizeRoomResult(await geminiGenerateJson(apiKey,parts),roomName,photosDataUrls.length);
-    } catch(geminiErr) {
-      var bk=localStorage.getItem('OPENAI_API_KEY')||'';
-      if(bk) {
-        if(aiText) aiText.innerText='Gemini falhou. Tentando IA auxiliar em '+roomName+'...';
-        return normalizeRoomResult(await callOpenAIBackup(bk,localStorage.getItem('OPENAI_MODEL')||'gpt-5.6-luna',roomName,photosDataUrls),roomName,photosDataUrls.length);
-      }
-      throw geminiErr;
     }
   }
 
@@ -1147,9 +818,6 @@
       .replace(/'/g, '&#39;');
   }
 
-  // =========================================================================
-  // RENDERIZADOR PERICIAL A4
-  // =========================================================================
   async function renderAndGeneratePdf() {
     var locador = document.getElementById('locador').value.trim() || 'Não informado';
     var locatario = document.getElementById('locatario').value.trim() || 'Não informado';
@@ -1159,10 +827,6 @@
     var dTermino = document.getElementById('dataTermino').value ? document.getElementById('dataTermino').value.split('-').reverse().join('/') : '';
     var dVistoria = document.getElementById('dataVistoria').value ? document.getElementById('dataVistoria').value.split('-').reverse().join('/') : '';
     var tipoVistoria = (document.querySelector('input[name="tipoVistoria"]:checked') || {}).value || 'Entrada';
-    var emailContestacao = document.getElementById('emailContestacao').value.trim();
-    var prazoContestacao = document.getElementById('prazoContestacao').value.trim();
-    var marcoContestacao = document.getElementById('marcoContestacao').value.trim();
-    var textoContestacao = document.getElementById('textoContestacao').value.trim();
     var clausulaContestacaoOriginal = document.getElementById('clausulaContestacaoOriginal').value.trim();
 
     var wrapper = document.getElementById('pdfTemplateWrapper');
@@ -1172,7 +836,6 @@
     var totalPages = selectedRooms.length + 1;
     var pageNum = 1;
 
-    // 1. FOLHAS DOS CÔMODOS
     selectedRooms.forEach(function(roomName, idx) {
       var data = roomsData[roomName];
       var ai = data.aiAnalysis;
@@ -1288,7 +951,6 @@
       pageNum++;
     });
 
-    // 2. FOLHA FINAL: 5. OBSERVAÇÕES E RESSALVAS CONSOLIDADAS + 6. TERMO DE ENCERRAMENTO
     var finalPage = document.createElement('div');
     finalPage.className = 'laudo-page';
 
@@ -1319,7 +981,6 @@
 
     var contestacaoFinalHtml = '<li style="margin-top:6px;"><strong>REGRAS DE CONTESTAÇÃO DA VISTORIA — conforme o item "LAUDO FOTOGRÁFICO DE VISTORIA PARA FINS DE LOCAÇÃO" do contrato:</strong><br>';
     if (clausulaContestacaoOriginal) {
-      // Reproduz o mesmo parágrafo do contrato, sem reescrever ou resumir.
       contestacaoFinalHtml += '<div style="margin-top:5px; padding:7px 9px; border-left:3px solid #c59b27; background:#faf8f2; text-align:justify;">' + escapeHtml(clausulaContestacaoOriginal) + '</div>';
     } else {
       contestacaoFinalHtml += '<div style="margin-top:5px;">Não foi localizado no contrato o parágrafo de contestação dentro do item "LAUDO FOTOGRÁFICO DE VISTORIA PARA FINS DE LOCAÇÃO".</div>';
