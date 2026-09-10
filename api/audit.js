@@ -73,15 +73,37 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     }
   });
 
-  // Modelos ativos e estáveis para a conta
-  const models = [
-    "gemini-3.6-flash",
-    "gemini-3.8-flash"
-  ];
+  // Lista dinâmica e fallback estático completo
+  let targetModels = [];
+
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      if (Array.isArray(listData.models)) {
+        targetModels = listData.models
+          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''))
+          .sort((a, b) => (a.includes('flash') ? -1 : 1));
+      }
+    }
+  } catch (_) {}
+
+  if (!targetModels.length) {
+    targetModels = [
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
+      "gemini-1.5-pro",
+      "gemini-3.6-flash",
+      "gemini-3.8-flash"
+    ];
+  }
 
   let lastError = "";
 
-  for (const model of models) {
+  for (const model of targetModels) {
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -91,15 +113,14 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
 
       const data = await response.json();
       if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const resultText = data.candidates[0].content.parts[0].text;
-        return res.status(200).json(JSON.parse(resultText));
+        return res.status(200).json(JSON.parse(data.candidates[0].content.parts[0].text));
       }
 
-      lastError = data.error?.message || `Erro HTTP ${response.status} no modelo ${model}`;
+      lastError = data.error?.message || `Falha HTTP ${response.status} no modelo ${model}`;
     } catch (err) {
       lastError = err.message;
     }
   }
 
-  res.status(500).json({ error: `Servidores do Gemini ocupados no momento: ${lastError}` });
+  res.status(500).json({ error: `Nenhum modelo disponível respondeu: ${lastError}` });
 }
