@@ -36,8 +36,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Email não encontrado para o cliente', customer: payment?.customer });
       }
 
+      // Define a expiração para exatamente 2 horas a partir de agora
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
+      expiresAt.setHours(expiresAt.getHours() + 2);
 
       // Atualiza o perfil correspondente no Supabase
       const supabaseUrl = process.env.SUPABASE_URL ? process.env.SUPABASE_URL.trim() : '';
