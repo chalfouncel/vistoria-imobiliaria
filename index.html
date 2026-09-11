@@ -34,6 +34,7 @@
 
   .user-bar { display: none; justify-content: space-between; align-items: center; background: #20242a; color: #cfd4dc; padding: 6px 16px; font-size: 0.78rem; border-bottom: 1px solid #333; }
   .user-bar span { color: #d4af37; font-weight: bold; }
+  .user-bar .time-chip { background: #121315; border: 1px solid #c59b27; color: #dfba48; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; margin-left: 8px; }
   .btn-logout-link { background: none; border: none; color: #ff6b6b; cursor: pointer; text-decoration: underline; font-size: 0.78rem; }
 
   .container { max-width: 650px; margin: 16px auto; padding: 0 16px; }
@@ -196,7 +197,7 @@
 
 <!-- BARRA DE USUÁRIO AUTENTICADO -->
 <div id="user-bar" class="user-bar">
-  <div>Conectado como: <span id="user-display-email"></span></div>
+  <div>Conectado como: <span id="user-display-email"></span> <span id="user-expires-badge" class="time-chip"></span></div>
   <button class="btn-logout-link" onclick="handleSignOut()">Sair</button>
 </div>
 
@@ -216,12 +217,12 @@
   </div>
 </div>
 
-<!-- BARREIRA DE BLOQUEIO POR FALTA DE ASSINATURA -->
+<!-- BARREIRA DE BLOQUEIO POR FALTA DE ACESSO AVULSO ATIVO -->
 <div id="sub-barrier-overlay">
   <div class="barrier-box">
-    <h3>Plano Inativo</h3>
-    <p>Sua conta está criada com sucesso, mas você ainda não possui uma <strong>assinatura ativa</strong> para processar laudos com a IA Gemini.</p>
-    <a href="https://www.asaas.com/c/uv6kefogcnoxdvkp" target="_blank" class="btn btn-primary" style="text-decoration:none;">Ativar Assinatura Mensal</a>
+    <h3>Acesso Expirado ou Inativo</h3>
+    <p>Para emitir seu laudo pericial com inteligência artificial, libere seu <strong>acesso avulso de 2 horas</strong> por apenas <strong>R$ 5,00</strong>.</p>
+    <a href="https://www.asaas.com/c/uv6kefogcnoxdvkp" target="_blank" class="btn btn-primary" style="text-decoration:none;">Liberar Acesso (2 Horas - R$ 5,00)</a>
     <button class="btn-logout-link" style="display:block; margin: 16px auto 0 auto;" onclick="handleSignOut()">Desconectar</button>
   </div>
 </div>
@@ -397,6 +398,7 @@
   const subBarrierOverlay = document.getElementById('sub-barrier-overlay');
   const userBar = document.getElementById('user-bar');
   const userDisplayEmail = document.getElementById('user-display-email');
+  const userExpiresBadge = document.getElementById('user-expires-badge');
   const authMsg = document.getElementById('auth-msg');
 
   async function checkUserSubscription(user) {
@@ -413,14 +415,23 @@
 
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('subscription_status')
+      .select('subscription_status, subscription_expires_at')
       .eq('id', user.id)
       .single();
 
-    if (error || !data || data.subscription_status !== 'ativo') {
+    const agora = new Date();
+    const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
+    const isValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
+
+    if (error || !isValido) {
       subBarrierOverlay.style.display = 'flex';
+      if (userExpiresBadge) userExpiresBadge.innerText = 'Expirado';
     } else {
       subBarrierOverlay.style.display = 'none';
+      if (userExpiresBadge && expiresAt) {
+        const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        userExpiresBadge.innerText = 'Válido até ' + horaFormatada;
+      }
     }
   }
 
