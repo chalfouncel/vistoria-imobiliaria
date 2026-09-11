@@ -7,6 +7,7 @@
 <title>Vistoria Fácil Pro — M&IC</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
   :root {
@@ -31,6 +32,10 @@
   header h1 { font-size: 1.25rem; font-weight: 800; color: #d4af37; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
   header p { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
 
+  .user-bar { display: none; justify-content: space-between; align-items: center; background: #20242a; color: #cfd4dc; padding: 6px 16px; font-size: 0.78rem; border-bottom: 1px solid #333; }
+  .user-bar span { color: #d4af37; font-weight: bold; }
+  .btn-logout-link { background: none; border: none; color: #ff6b6b; cursor: pointer; text-decoration: underline; font-size: 0.78rem; }
+
   .container { max-width: 650px; margin: 16px auto; padding: 0 16px; }
   .card { background: var(--card); border-radius: 12px; padding: 18px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--border); }
   .card h2 { font-size: 1.05rem; color: var(--secondary); margin-bottom: 12px; border-bottom: 2px solid #eef2f5; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
@@ -40,10 +45,10 @@
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
   label { display: block; font-size: 0.84rem; font-weight: 700; color: #343a40; margin-bottom: 4px; margin-top: 12px; }
-  input[type="text"], input[type="date"], input[type="password"], textarea, select {
+  input[type="text"], input[type="date"], input[type="password"], input[type="email"], textarea, select {
     width: 100%; padding: 12px; border: 1.5px solid #ced4da; border-radius: 8px; font-size: 0.95rem; background: #fff; color: #212529; font-weight: 500;
   }
-  input[type="text"]:focus { border-color: #007bff; outline: none; }
+  input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus { border-color: #007bff; outline: none; }
   .field-ok { background-color: #e8f5e9 !important; border-color: #28a745 !important; }
   input[type="file"] { display: none; }
 
@@ -91,6 +96,34 @@
   .app-copyright strong {
     color: #343a40;
   }
+
+  /* MODAL DE AUTENTICAÇÃO E BARREIRA */
+  #auth-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(4px);
+    z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .auth-box {
+    background: #ffffff; border-radius: 14px; padding: 26px 22px; width: 100%; max-width: 380px;
+    box-shadow: 0 15px 30px rgba(0,0,0,0.3); border: 1px solid #e2e8f0;
+  }
+  .auth-box h2 { font-size: 1.25rem; color: #0f172a; text-align: center; margin-bottom: 6px; }
+  .auth-box p { font-size: 0.8rem; color: #64748b; text-align: center; margin-bottom: 16px; }
+  .auth-box input { margin-bottom: 10px; font-size: 0.9rem; padding: 10px 12px; }
+  .auth-status-msg { font-size: 0.78rem; text-align: center; margin-top: 10px; min-height: 18px; font-weight: 600; }
+  .auth-status-err { color: #dc2626; }
+  .auth-status-ok { color: #16a34a; }
+
+  #sub-barrier-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.96); z-index: 9998; align-items: center; justify-content: center; padding: 16px;
+  }
+  .barrier-box {
+    background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 28px 22px; width: 100%; max-width: 420px;
+    color: #f8fafc; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+  }
+  .barrier-box h3 { color: #d4af37; font-size: 1.3rem; margin-bottom: 10px; }
+  .barrier-box p { color: #cbd5e1; font-size: 0.88rem; line-height: 1.45; margin-bottom: 20px; }
 
   /* DIAGRAMAÇÃO A4 */
   #pdfTemplateWrapper { display: none; }
@@ -160,6 +193,38 @@
 </style>
 </head>
 <body>
+
+<!-- BARRA DE USUÁRIO AUTENTICADO -->
+<div id="user-bar" class="user-bar">
+  <div>Conectado como: <span id="user-display-email"></span></div>
+  <button class="btn-logout-link" onclick="handleSignOut()">Sair</button>
+</div>
+
+<!-- OVERLAY DE LOGIN / CADASTRO -->
+<div id="auth-overlay">
+  <div class="auth-box">
+    <h2>Vistoria Fácil Pro</h2>
+    <p>Acesse com seu e-mail e senha para prosseguir</p>
+
+    <input type="email" id="auth-email" placeholder="E-mail profissional">
+    <input type="password" id="auth-password" placeholder="Sua senha">
+
+    <button class="btn btn-primary" style="margin-top:6px;" onclick="handleLogin()">Entrar</button>
+    <button class="btn btn-next" style="margin-top:8px;" onclick="handleSignUp()">Criar Nova Conta</button>
+
+    <div id="auth-msg" class="auth-status-msg"></div>
+  </div>
+</div>
+
+<!-- BARREIRA DE BLOQUEIO POR FALTA DE ASSINATURA -->
+<div id="sub-barrier-overlay">
+  <div class="barrier-box">
+    <h3>Plano Inativo</h3>
+    <p>Sua conta está criada com sucesso, mas você ainda não possui uma <strong>assinatura ativa</strong> para processar laudos com a IA Gemini.</p>
+    <button class="btn btn-primary" onclick="alert('O checkout de pagamento será integrado no próximo passo!')">Ativar Assinatura Mensal</button>
+    <button class="btn-logout-link" style="display:block; margin: 16px auto 0 auto;" onclick="handleSignOut()">Desconectar</button>
+  </div>
+</div>
 
 <header>
   <h1>VISTORIA DE LOCAÇÃO COM IA</h1>
@@ -323,6 +388,96 @@
 <div id="pdfTemplateWrapper"></div>
 
 <script>
+  // CONFIGURAÇÃO SUPABASE
+  const SUPABASE_URL = 'https://hxwxxrxbgrmlhmtmszcp.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_qGU-Xmh2FNapx_bWu8VAAw_zMA1gHvf';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const authOverlay = document.getElementById('auth-overlay');
+  const subBarrierOverlay = document.getElementById('sub-barrier-overlay');
+  const userBar = document.getElementById('user-bar');
+  const userDisplayEmail = document.getElementById('user-display-email');
+  const authMsg = document.getElementById('auth-msg');
+
+  async function checkUserSubscription(user) {
+    if (!user) {
+      authOverlay.style.display = 'flex';
+      subBarrierOverlay.style.display = 'none';
+      userBar.style.display = 'none';
+      return;
+    }
+
+    authOverlay.style.display = 'none';
+    userBar.style.display = 'flex';
+    userDisplayEmail.innerText = user.email;
+
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('subscription_status')
+      .eq('id', user.id)
+      .single();
+
+    if (error || !data || data.subscription_status !== 'ativo') {
+      subBarrierOverlay.style.display = 'flex';
+    } else {
+      subBarrierOverlay.style.display = 'none';
+    }
+  }
+
+  async function handleLogin() {
+    authMsg.className = 'auth-status-msg';
+    authMsg.innerText = 'Entrando...';
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+
+    if (!email || !password) {
+      authMsg.className = 'auth-status-msg auth-status-err';
+      authMsg.innerText = 'Preencha e-mail e senha.';
+      return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      authMsg.className = 'auth-status-msg auth-status-err';
+      authMsg.innerText = 'Erro: ' + error.message;
+    } else {
+      authMsg.innerText = '';
+      checkUserSubscription(data.user);
+    }
+  }
+
+  async function handleSignUp() {
+    authMsg.className = 'auth-status-msg';
+    authMsg.innerText = 'Criando sua conta...';
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+
+    if (!email || !password) {
+      authMsg.className = 'auth-status-msg auth-status-err';
+      authMsg.innerText = 'Preencha e-mail e senha.';
+      return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) {
+      authMsg.className = 'auth-status-msg auth-status-err';
+      authMsg.innerText = 'Erro: ' + error.message;
+    } else {
+      authMsg.className = 'auth-status-msg auth-status-ok';
+      authMsg.innerText = 'Conta criada com sucesso!';
+      checkUserSubscription(data.user);
+    }
+  }
+
+  async function handleSignOut() {
+    await supabaseClient.auth.signOut();
+    window.location.reload();
+  }
+
+  supabaseClient.auth.getSession().then(({ data: { session } }) => {
+    checkUserSubscription(session?.user || null);
+  });
+
   window.addEventListener('DOMContentLoaded', function() {
     document.getElementById('dataVistoria').valueAsDate = new Date();
   });
