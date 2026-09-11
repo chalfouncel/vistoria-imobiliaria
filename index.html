@@ -415,9 +415,16 @@
 
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('subscription_status, subscription_expires_at')
+      .select('subscription_status, subscription_expires_at, role')
       .eq('id', user.id)
       .single();
+
+    // Acesso irrestrito para contas com privilégio de administrador
+    if (data && data.role === 'admin') {
+      subBarrierOverlay.style.display = 'none';
+      if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso VIP';
+      return;
+    }
 
     const agora = new Date();
     const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
