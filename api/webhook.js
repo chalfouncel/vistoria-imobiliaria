@@ -9,34 +9,39 @@ export default async function handler(req, res) {
     if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
       let customerEmail = payment?.customerEmail || payment?.email;
 
-      // Se o email não vier direto no payload, busca na API do Asaas pelo ID do cliente
+      // Se o email não estiver no payload, consulta os dados do cliente no Asaas
       if (!customerEmail && payment?.customer) {
-        try {
-          const asaasRes = await fetch(`https://www.asaas.com/api/v3/customers/${payment.customer}`, {
-            headers: {
-              'access_token': process.env.ASAAS_API_KEY || ''
-            }
-          });
-          if (asaasRes.ok) {
-            const customerData = await asaasRes.json();
-            customerEmail = customerData.email;
+        const apiKey = process.env.ASAAS_API_KEY ? process.env.ASAAS_API_KEY.trim() : '';
+        const asaasUrl = `https://api.asaas.com/v3/customers/${payment.customer}`;
+
+        const asaasRes = await fetch(asaasUrl, {
+          method: 'GET',
+          headers: {
+            'access_token': apiKey,
+            'User-Agent': 'VistoriaApp'
           }
-        } catch (e) {
-          console.error('Falha ao consultar cliente Asaas:', e);
+        });
+
+        if (asaasRes.ok) {
+          const customerData = await asaasRes.json();
+          customerEmail = customerData?.email;
+        } else {
+          const errStatus = asaasRes.status;
+          const errBody = await asaasRes.text();
+          return res.status(500).json({ error: 'Erro ao consultar cliente Asaas', status: errStatus, details: errBody });
         }
       }
 
       if (!customerEmail) {
-        console.warn('Webhook recebido sem email identificável:', payment);
-        return res.status(200).json({ received: true, warning: 'Email não encontrado no evento' });
+        return res.status(400).json({ error: 'Email não encontrado para o cliente', customer: payment?.customer });
       }
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
 
-      // Atualiza o Supabase via REST API direta (sem depender de bibliotecas externas)
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      // Atualiza o perfil correspondente no Supabase
+      const supabaseUrl = process.env.SUPABASE_URL ? process.env.SUPABASE_URL.trim() : '';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.trim() : '';
 
       const patchRes = await fetch(`${supabaseUrl}/rest/v1/profiles?email=ilike.${encodeURIComponent(customerEmail.trim())}`, {
         method: 'PATCH',
@@ -54,16 +59,15 @@ export default async function handler(req, res) {
 
       if (!patchRes.ok) {
         const errorText = await patchRes.text();
-        console.error('Erro ao atualizar Supabase:', errorText);
-        return res.status(500).json({ error: errorText });
+        return res.status(500).json({ error: 'Erro Supabase', details: errorText });
       }
 
-      return res.status(200).json({ success: true, activated: customerEmail });
+      const updatedData = await patchRes.json();
+      return res.status(200).json({ success: true, activated: customerEmail, updatedRows: updatedData.length });
     }
 
     return res.status(200).json({ received: true, ignoredEvent: event });
   } catch (err) {
-    console.error('Erro interno:', err);
     return res.status(500).json({ error: err.message });
   }
 }
