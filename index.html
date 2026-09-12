@@ -411,20 +411,13 @@
     </div>
   </div>
 
-  <!-- ETAPA 2: AMBIENTES -->
+  <!-- ETAPA 2: AMBIENTES (CÔMODOS PRIMEIRO, ITENS ESPECIAIS DEPOIS) -->
   <div id="step-rooms" class="step">
     <div class="card">
       <h2>2. Seleção de Ambientes e Itens Técnicos</h2>
       <p style="font-size:0.82rem; color:#6c757d;">Marque os cômodos e itens presentes no imóvel:</p>
 
-      <div style="font-size:0.78rem; font-weight:bold; color:#c59b27; margin-top:10px; text-transform:uppercase;">Itens Técnicos Obrigatórios:</div>
-      <div class="checkbox-grid" id="specialRoomsGrid">
-        <label class="checkbox-card special-room"><input type="checkbox" value="Relógio de luz" checked> ⚡ Relógio de luz</label>
-        <label class="checkbox-card special-room"><input type="checkbox" value="Medidor de Gás" checked> 🔥 Medidor de Gás</label>
-        <label class="checkbox-card special-room"><input type="checkbox" value="Chaves" checked> 🔑 Chaves do Imóvel</label>
-      </div>
-
-      <div style="font-size:0.78rem; font-weight:bold; color:#555; margin-top:14px; text-transform:uppercase;">Cômodos do Imóvel:</div>
+      <div style="font-size:0.78rem; font-weight:bold; color:#555; margin-top:10px; text-transform:uppercase;">Cômodos do Imóvel:</div>
       <div class="checkbox-grid" id="roomsGrid">
         <label class="checkbox-card"><input type="checkbox" value="Sala" checked> Sala</label>
         <label class="checkbox-card"><input type="checkbox" value="Cozinha" checked> Cozinha</label>
@@ -437,6 +430,13 @@
         <label class="checkbox-card"><input type="checkbox" value="Quarto 4"> Quarto 4</label>
         <label class="checkbox-card"><input type="checkbox" value="Dependência de Empregada"> Dependência</label>
         <label class="checkbox-card"><input type="checkbox" value="Varanda"> Varanda</label>
+      </div>
+
+      <div style="font-size:0.78rem; font-weight:bold; color:#c59b27; margin-top:16px; text-transform:uppercase;">Itens Técnicos Especiais:</div>
+      <div class="checkbox-grid" id="specialRoomsGrid">
+        <label class="checkbox-card special-room"><input type="checkbox" value="Relógio de luz" checked> ⚡ Relógio de luz</label>
+        <label class="checkbox-card special-room"><input type="checkbox" value="Medidor de Gás" checked> 🔥 Medidor de Gás</label>
+        <label class="checkbox-card special-room"><input type="checkbox" value="Chaves" checked> 🔑 Chaves do Imóvel</label>
       </div>
 
       <button class="btn btn-primary" onclick="startPhotoStep()">Iniciar Registro Fotográfico ➔</button>
@@ -762,8 +762,6 @@
 
   function runContractExtractionV16(allLines, page1Lines) {
     var page1Text = page1Lines.join(" ");
-    var allText = allLines.join(" ");
-
     var locadorEncontrado = "";
     var mLoc1 = page1Text.match(/LOCADOR(?:A)?\s*\(?\s*A\s*\)?\s*[:\-–]?\s*([^,;\n]+)/i);
     if (mLoc1 && isValidPersonName(mLoc1[1])) locadorEncontrado = cleanName(mLoc1[1]);
@@ -896,8 +894,14 @@
   }
 
   function startPhotoStep() {
-    var checkboxes = document.querySelectorAll('#roomsGrid input[type="checkbox"]:checked, #specialRoomsGrid input[type="checkbox"]:checked');
-    selectedRooms = Array.from(checkboxes).map(function(c) { return c.value; });
+    // Ordem estrita: cômodos normais primeiro, depois os itens técnicos especiais
+    var normalCheckboxes = document.querySelectorAll('#roomsGrid input[type="checkbox"]:checked');
+    var specialCheckboxes = document.querySelectorAll('#specialRoomsGrid input[type="checkbox"]:checked');
+    
+    var normalList = Array.from(normalCheckboxes).map(function(c) { return c.value; });
+    var specialList = Array.from(specialCheckboxes).map(function(c) { return c.value; });
+    
+    selectedRooms = normalList.concat(specialList);
     
     if (selectedRooms.length === 0) {
       alert("Selecione ao menos 1 item ou cômodo.");
@@ -1322,7 +1326,6 @@
       finalHtml += '<li><strong>' + rName.toUpperCase() + ':</strong> ' + res + '</li>';
     });
 
-    // Cláusula de contestação expressa de 15 dias após entrega das chaves
     finalHtml += 
             '<li style="margin-top:8px;"><strong>PRAZO E REGRAS EXPRESSAS DE CONTESTAÇÃO DA VISTORIA:</strong><br>' +
             '<div style="margin-top:4px; padding:7px 9px; border-left:3px solid #c59b27; background:#faf8f2; text-align:justify;">' +
