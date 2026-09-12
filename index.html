@@ -86,6 +86,7 @@
   }
   .checkbox-card input { transform: scale(1.2); }
   .checkbox-card.checked { background: #e8f4fd; border-color: #007bff; color: #007bff; font-weight: 700; }
+  .checkbox-card.special-room { border-color: #c59b27; background: #fdfbf7; }
 
   .btn { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 14px 16px; border-radius: 8px; border: none; font-size: 1rem; font-weight: 600; cursor: pointer; transition: 0.2s; gap: 8px; margin-top: 14px; text-decoration: none; }
   .btn-primary { background: linear-gradient(135deg, #c59b27, #dfba48); color: #121315; font-weight: 700; border: 1px solid #b88d1e; text-shadow: 0 0 1px rgba(255,255,255,0.4); }
@@ -94,6 +95,8 @@
   .btn-share { background: #17a2b8; color: #fff; }
   .btn-download { background: #28a745; color: #fff; }
   .btn-maintenance { background: #34495e; color: #fff; font-size: 0.82rem; padding: 10px; margin-top: 14px; border: 1px dashed #c59b27; }
+  .btn-not-available { background: #e2e8f0; color: #475569; border: 1.5px dashed #94a3b8; font-size: 0.88rem; padding: 10px; margin-top: 8px; font-weight: 600; }
+  .btn-not-available.active { background: #fee2e2; color: #b91c1c; border-color: #ef4444; }
 
   .photo-gallery { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
   .photo-card { position: relative; border-radius: 6px; overflow: hidden; border: 1px solid #ced4da; height: 90px; background: #000; }
@@ -101,6 +104,7 @@
   .photo-counter { font-size: 0.85rem; font-weight: 700; text-align: center; margin-top: 10px; }
 
   .badge { background: #007bff; color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; }
+  .badge-special { background: #c59b27; }
   .room-header { background: #eef2f5; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #007bff; }
   
   .loader-box { display: none; text-align: center; padding: 16px 10px; background: #fdfdfd; border-radius: 8px; border: 1px solid #e9ecef; margin-top: 14px; }
@@ -190,7 +194,7 @@
     height: 100%;
   }
 
-  /* CABEÇALHO PERICIAL BLINDADO COM TABELA RIGIDA */
+  /* CABEÇALHO PERICIAL TABULAR BLINDADO */
   .table-header-grid {
     width: 100%;
     table-layout: fixed;
@@ -247,10 +251,10 @@
     color: #121315;
   }
 
-  .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.4pt; background: rgba(255,255,255,0.9); }
-  .table-cadastral td { border: 1px solid #c0c0c0; padding: 3.5px 5px; }
-  .table-cadastral .cad-lbl { background: #faf6ec; font-weight: bold; width: 18%; color: #8a6a12; border-color: #d8ceb8; }
-  .table-cadastral .cad-val { width: 32%; color: #111; }
+  .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.2pt; background: rgba(255,255,255,0.9); }
+  .table-cadastral td { border: 1px solid #c0c0c0; padding: 3px 5px; }
+  .table-cadastral .cad-lbl { background: #faf6ec; font-weight: bold; width: 19%; color: #8a6a12; border-color: #d8ceb8; }
+  .table-cadastral .cad-val { width: 31%; color: #111; }
 
   .room-banner { background: linear-gradient(90deg, #121315, #24272c); color: #dfba48; border-left: 4px solid #c59b27; font-size: 8.8pt; font-weight: bold; padding: 4px 8px; text-transform: uppercase; margin-top: 6px; margin-bottom: 4px; border-radius: 2px; }
   .room-intro-text { font-size: 7.2pt; color: #333; margin-bottom: 6px; font-style: italic; line-height: 1.2; }
@@ -410,9 +414,17 @@
   <!-- ETAPA 2: AMBIENTES -->
   <div id="step-rooms" class="step">
     <div class="card">
-      <h2>2. Seleção de Ambientes</h2>
-      <p style="font-size:0.82rem; color:#6c757d;">Marque os cômodos presentes no imóvel:</p>
+      <h2>2. Seleção de Ambientes e Itens Técnicos</h2>
+      <p style="font-size:0.82rem; color:#6c757d;">Marque os cômodos e itens presentes no imóvel:</p>
 
+      <div style="font-size:0.78rem; font-weight:bold; color:#c59b27; margin-top:10px; text-transform:uppercase;">Itens Técnicos Obrigatórios:</div>
+      <div class="checkbox-grid" id="specialRoomsGrid">
+        <label class="checkbox-card special-room"><input type="checkbox" value="Relógio de luz" checked> ⚡ Relógio de luz</label>
+        <label class="checkbox-card special-room"><input type="checkbox" value="Medidor de Gás" checked> 🔥 Medidor de Gás</label>
+        <label class="checkbox-card special-room"><input type="checkbox" value="Chaves" checked> 🔑 Chaves do Imóvel</label>
+      </div>
+
+      <div style="font-size:0.78rem; font-weight:bold; color:#555; margin-top:14px; text-transform:uppercase;">Cômodos do Imóvel:</div>
       <div class="checkbox-grid" id="roomsGrid">
         <label class="checkbox-card"><input type="checkbox" value="Sala" checked> Sala</label>
         <label class="checkbox-card"><input type="checkbox" value="Cozinha" checked> Cozinha</label>
@@ -431,7 +443,7 @@
     </div>
   </div>
 
-  <!-- ETAPA 3: REGISTRO FOTOGRÁFICO POR CÔMODO -->
+  <!-- ETAPA 3: REGISTRO FOTOGRÁFICO POR CÔMODO / ITEM -->
   <div id="step-photos" class="step">
     <div class="card">
       <div class="room-header">
@@ -439,21 +451,26 @@
         <h3 id="currentRoomTitle" style="margin-top:4px; font-size:1.15rem; color:#0f2027;">Sala</h3>
       </div>
 
-      <label for="cameraInput" class="btn btn-camera">
+      <label for="cameraInput" class="btn btn-camera" id="btnCaptureArea">
         <svg style="width:20px;height:20px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
         Tirar Foto / Anexar Imagem
       </label>
       <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-      <div class="photo-counter" id="photoCountNotice">0 fotos (mínimo 3)</div>
+      <!-- Botão para itens técnicos especiais -->
+      <button type="button" id="btnToggleUnavailable" class="btn btn-not-available" style="display:none;" onclick="toggleRoomUnavailable()">
+        Marcar como: "Não possui / Não disponível no imóvel"
+      </button>
+
+      <div class="photo-counter" id="photoCountNotice">0 fotos</div>
       <div class="photo-gallery" id="roomPhotoGallery"></div>
 
-      <button id="btnNextRoom" class="btn btn-next" style="display:none;" onclick="handleNextRoom()">Passar para o próximo Cômodo ➔</button>
+      <button id="btnNextRoom" class="btn btn-next" style="display:none;" onclick="handleNextRoom()">Passar para o próximo Item/Cômodo ➔</button>
       <button id="btnFinish" class="btn btn-primary" style="display:none;" onclick="startGeminiAuditAndPdf()">Gerar Laudo Pericial com IA Gemini ★</button>
 
       <div id="aiLoader" class="loader-box">
         <div class="spinner"></div>
-        <div id="aiLoaderText" style="font-size:0.85rem; font-weight:600; color:#007bff;">O Gemini está analisando os detalhes das fotos...</div>
+        <div id="aiLoaderText" style="font-size:0.85rem; font-weight:600; color:#007bff;">O Gemini está analisando os detalhes técnicos...</div>
       </div>
     </div>
   </div>
@@ -494,6 +511,8 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_qGU-Xmh2FNapx_bWu8VAAw_zMA1gHvf';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+  let currentVistoriadorEmail = "Não identificado";
+
   const authOverlay = document.getElementById('auth-overlay');
   const subBarrierOverlay = document.getElementById('sub-barrier-overlay');
   const userBar = document.getElementById('user-bar');
@@ -506,9 +525,11 @@
       authOverlay.style.display = 'flex';
       subBarrierOverlay.style.display = 'none';
       userBar.style.display = 'none';
+      currentVistoriadorEmail = "Não identificado";
       return;
     }
 
+    currentVistoriadorEmail = user.email;
     authOverlay.style.display = 'none';
     userBar.style.display = 'flex';
     userDisplayEmail.innerText = user.email;
@@ -729,10 +750,7 @@
       }
 
       runContractExtractionV16(allRawLines, page1RawLines);
-      statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido. ' +
-      (document.getElementById('emailContestacao').value ? 'E-mail de contestação capturado. ' : 'E-mail de contestação não localizado. ') +
-      (document.getElementById('prazoContestacao').value ? 'Prazo de contestação capturado. ' : 'Prazo de contestação não localizado.') +
-      '</span>';
+      statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e dados cadastrais carregados.</span>';
 
     } catch (err) {
       console.error(err);
@@ -799,76 +817,6 @@
       document.getElementById('dataInicio').value = toIso(dateMatches[0]);
       document.getElementById('dataTermino').value = toIso(dateMatches[1]);
     }
-
-    var clause = extractContestacaoClause(allText);
-    var clauseEmails = clause.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || [];
-    var emailContestacao = clauseEmails[0] || "";
-    if (emailContestacao) {
-      document.getElementById('emailContestacao').value = emailContestacao;
-      highlightField('emailContestacao');
-    }
-
-    if (clause) {
-      document.getElementById('clausulaContestacaoOriginal').value = clause;
-      document.getElementById('textoContestacao').value = clause;
-      highlightField('textoContestacao');
-    }
-
-    var prazoInfo = extractContestacaoDeadline(clause);
-    if (prazoInfo.prazo) {
-      document.getElementById('prazoContestacao').value = prazoInfo.prazo;
-      highlightField('prazoContestacao');
-    }
-    if (prazoInfo.marco) {
-      document.getElementById('marcoContestacao').value = prazoInfo.marco;
-      highlightField('marcoContestacao');
-    }
-  }
-
-  function extractContestacaoClause(fullText) {
-    if (!fullText) return "";
-    var compact = String(fullText).replace(/\s+/g, ' ').trim();
-    var headingRe = /LAUDO\s+FOTOGR[AÁÀÂÃÄ]FICO\s+DE\s+VISTORIA\s+PARA\s+FINS\s+DE\s+LOCA[CÇ]ÃO/i;
-    var headingMatch = headingRe.exec(compact);
-    if (!headingMatch) return "";
-
-    var section = compact.substring(headingMatch.index + headingMatch[0].length).trim();
-    var startRe = /Ap[oó]s\s+a\s+entrega\s+das\s+chaves,\s+o\s+(?:LOCAT[AÁÀÂÃÄ]RIO|inquilino)\s+pode\s+enviar\s+as\s+suas\s+observa[cç][oõ]es\s+ao\s+lado\s+num\s+prazo\s+de/i;
-    var startMatch = startRe.exec(section);
-
-    if (!startMatch) {
-      var fallbackRe = /Ap[oó]s\s+a\s+entrega\s+das\s+chaves/i;
-      startMatch = fallbackRe.exec(section);
-    }
-    if (!startMatch) return "";
-
-    var tail = section.substring(startMatch.index);
-    var endRe = /\s+E,?\s*por\s+estarem,?\s+assim,?\s+justos\s+e\s+contratados\b/i;
-    var endMatch = endRe.exec(tail);
-    var paragraph = endMatch ? tail.substring(0, endMatch.index).trim() : tail.split(/\s+Rio de Janeiro,\s*/i)[0].trim();
-
-    var hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(paragraph);
-    var hasPrazo = /\b\d{1,3}\s*(?:\(\s*\d{1,3}\s*\))?\s*dias?\b/i.test(paragraph);
-    if (!hasEmail || !hasPrazo || paragraph.length < 40) return "";
-    return paragraph;
-  }
-
-  function extractContestacaoDeadline(clause) {
-    var result = { prazo: "", marco: "" };
-    if (!clause) return result;
-    var m = clause.match(/\b(\d{1,3}|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|quinze|vinte|trinta)\s*(?:\(\s*\d{1,3}\s*\))?\s*(dias?|d\.)\s*([a-záéíóúâêôãõç]+)?\b/i);
-    if (m) result.prazo = (m[1] + ' ' + m[2] + (m[3] ? ' ' + m[3] : '')).trim();
-
-    var lower = cleanSearch(clause);
-    var markers = ['apos a entrega das chaves', 'apos entrega das chaves', 'a partir da entrega das chaves', 'a contar da entrega das chaves', 'a partir da disponibilizacao das chaves', 'a contar da disponibilizacao das chaves'];
-    for (var i = 0; i < markers.length; i++) {
-      var idx = lower.indexOf(cleanSearch(markers[i]));
-      if (idx !== -1) {
-        result.marco = clause.substring(idx, Math.min(clause.length, idx + 140)).trim();
-        break;
-      }
-    }
-    return result;
   }
 
   function findTrueSignerAbove(lines, index) {
@@ -919,8 +867,20 @@
   var currentRoomIndex = 0;
   var roomsData = {};
 
+  function isSpecialItem(roomName) {
+    var r = cleanSearch(roomName);
+    return (r.indexOf("luz") !== -1 || r.indexOf("gas") !== -1 || r.indexOf("chaves") !== -1);
+  }
+
+  function getMinPhotosForRoom(roomName) {
+    return isSpecialItem(roomName) ? 1 : 3;
+  }
+
   function getRoomPrefix(roomName) {
     var r = cleanSearch(roomName);
+    if (r.indexOf("relogio") !== -1 || r.indexOf("luz") !== -1) return "LUZ_";
+    if (r.indexOf("gas") !== -1) return "GAS_";
+    if (r.indexOf("chaves") !== -1) return "CHV_";
     if (r.indexOf("sala") !== -1) return "S";
     if (r.indexOf("banheiro") !== -1) return "B";
     if (r.indexOf("suite") !== -1) return "ST";
@@ -932,21 +892,23 @@
     if (r.indexOf("servico") !== -1 || r.indexOf("área") !== -1) return "AS_";
     if (r.indexOf("varanda") !== -1) return "V";
     if (r.indexOf("dependencia") !== -1) return "DEP_";
-    return r.substring(0, 2).toUpperCase();
+    return r.substring(0, 3).toUpperCase() + "_";
   }
 
   function startPhotoStep() {
-    var checkboxes = document.querySelectorAll('#roomsGrid input[type="checkbox"]:checked');
+    var checkboxes = document.querySelectorAll('#roomsGrid input[type="checkbox"]:checked, #specialRoomsGrid input[type="checkbox"]:checked');
     selectedRooms = Array.from(checkboxes).map(function(c) { return c.value; });
     
     if (selectedRooms.length === 0) {
-      alert("Selecione ao menos 1 cômodo.");
+      alert("Selecione ao menos 1 item ou cômodo.");
       return;
     }
 
     currentRoomIndex = 0;
     roomsData = {};
-    selectedRooms.forEach(function(r) { roomsData[r] = { photos: [], aiAnalysis: null }; });
+    selectedRooms.forEach(function(r) { 
+      roomsData[r] = { photos: [], aiAnalysis: null, unavailable: false }; 
+    });
 
     document.getElementById('step-rooms').classList.remove('active');
     document.getElementById('step-photos').classList.add('active');
@@ -955,34 +917,75 @@
 
   function renderCurrentRoom() {
     var room = selectedRooms[currentRoomIndex];
-    document.getElementById('roomBadge').innerText = "Ambiente " + (currentRoomIndex + 1) + " de " + selectedRooms.length;
+    var isSpecial = isSpecialItem(room);
+    var badgeEl = document.getElementById('roomBadge');
+    
+    badgeEl.innerText = (isSpecial ? "Item Técnico " : "Cômodo ") + (currentRoomIndex + 1) + " de " + selectedRooms.length;
+    badgeEl.className = isSpecial ? "badge badge-special" : "badge";
     document.getElementById('currentRoomTitle').innerText = room;
+
+    var btnUnavail = document.getElementById('btnToggleUnavailable');
+    if (isSpecial) {
+      btnUnavail.style.display = 'block';
+      if (roomsData[room].unavailable) {
+        btnUnavail.classList.add('active');
+        btnUnavail.innerText = '✓ Marcado como: Não possui / Não disponível (Toque para desmarcar)';
+      } else {
+        btnUnavail.classList.remove('active');
+        btnUnavail.innerText = 'Marcar como: "Não possui / Não disponível no imóvel"';
+      }
+    } else {
+      btnUnavail.style.display = 'none';
+    }
+
     updatePhotosUI();
     window.scrollTo(0, 0);
   }
 
+  function toggleRoomUnavailable() {
+    var room = selectedRooms[currentRoomIndex];
+    roomsData[room].unavailable = !roomsData[room].unavailable;
+    if (roomsData[room].unavailable) {
+      roomsData[room].photos = [];
+    }
+    renderCurrentRoom();
+  }
+
   function updatePhotosUI() {
     var room = selectedRooms[currentRoomIndex];
-    var photos = roomsData[room].photos;
+    var data = roomsData[room];
+    var photos = data.photos;
     var gallery = document.getElementById('roomPhotoGallery');
+    var countNotice = document.getElementById('photoCountNotice');
+    var captureArea = document.getElementById('btnCaptureArea');
+    var minPhotos = getMinPhotosForRoom(room);
+
     gallery.innerHTML = '';
 
-    photos.forEach(function(src, idx) {
-      var card = document.createElement('div');
-      card.className = 'photo-card';
-      card.innerHTML = '<img src="' + src + '"><span style="position:absolute;bottom:2px;right:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;">#' + (idx+1) + '</span>';
-      gallery.appendChild(card);
-    });
+    if (data.unavailable) {
+      captureArea.style.display = 'none';
+      countNotice.innerText = '⚠️ Item marcado como NÃO POSSUI / NÃO DISPONÍVEL no imóvel.';
+      countNotice.style.color = 'var(--warning)';
+    } else {
+      captureArea.style.display = 'inline-flex';
+      photos.forEach(function(src, idx) {
+        var card = document.createElement('div');
+        card.className = 'photo-card';
+        card.innerHTML = '<img src="' + src + '"><span style="position:absolute;bottom:2px;right:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;">#' + (idx+1) + '</span>';
+        gallery.appendChild(card);
+      });
 
-    var countNotice = document.getElementById('photoCountNotice');
-    countNotice.innerText = photos.length + " foto(s) tirada(s) " + (photos.length < 3 ? "(mínimo 3 para avançar)" : "✓ Mínimo atingido");
-    countNotice.style.color = photos.length >= 3 ? 'var(--success)' : '#6c757d';
+      countNotice.innerText = photos.length + " foto(s) tirada(s) " + (photos.length < minPhotos ? "(mínimo " + minPhotos + " foto)" : "✓ Mínimo atingido");
+      countNotice.style.color = photos.length >= minPhotos ? 'var(--success)' : '#6c757d';
+    }
 
     var isLastRoom = (currentRoomIndex === selectedRooms.length - 1);
     var btnNext = document.getElementById('btnNextRoom');
     var btnFinish = document.getElementById('btnFinish');
 
-    if (photos.length >= 3) {
+    var isReady = data.unavailable || (photos.length >= minPhotos);
+
+    if (isReady) {
       if (isLastRoom) {
         btnNext.style.display = 'none';
         btnFinish.style.display = 'flex';
@@ -1016,6 +1019,7 @@
         var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
         var room = selectedRooms[currentRoomIndex];
+        roomsData[room].unavailable = false;
         roomsData[room].photos.push(dataUrl);
         updatePhotosUI();
       };
@@ -1036,7 +1040,11 @@
     var response = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomName: roomName, photosDataUrls: photosDataUrls })
+      body: JSON.stringify({ 
+        roomName: roomName, 
+        photosDataUrls: photosDataUrls,
+        isMeterReading: (cleanSearch(roomName).indexOf("luz") !== -1 || cleanSearch(roomName).indexOf("gas") !== -1)
+      })
     });
 
     if (!response.ok) {
@@ -1056,16 +1064,16 @@
       var f = fs[i] || {};
       fotos.push({
         titulo: String(f.titulo || ('Registro ' + (i + 1) + ' — ' + roomName)).trim(),
-        descricao: String(f.descricao || 'Não foi possível produzir descrição conclusiva desta fotografia.').trim(),
+        descricao: String(f.descricao || 'Registro fotográfico técnico do item.').trim(),
         avaria: f.avaria === true
       });
     }
     var els = Array.isArray(obj.elementos) ? obj.elementos : [];
     return {
-      introducao: String(obj.introducao || ('Análise fotográfica do ambiente ' + roomName + '.')).trim(),
-      elementos: els.length ? els : [{ elemento: 'Registro visual', descricao: 'Constatações limitadas ao que é identificável nas fotografias.', funcionamento: 'Não verificável por fotografia', classificacao: 'NÃO CONCLUSIVO' }],
+      introducao: String(obj.introducao || ('Auditoria técnica do item/ambiente ' + roomName + '.')).trim(),
+      elementos: els.length ? els : [{ elemento: roomName, descricao: 'Constatações limitadas ao registro fotográfico.', funcionamento: 'Em conformidade visual', classificacao: 'BOM' }],
       fotos: fotos,
-      ressalvas: String(obj.ressalvas || 'A análise é estritamente visual e não substitui testes presenciais de funcionamento, medições ou ensaios técnicos.').trim()
+      ressalvas: String(obj.ressalvas || 'Registros consolidados conforme visualizado no momento da inspeção.').trim()
     };
   }
 
@@ -1075,15 +1083,19 @@
     var aiText = document.getElementById('aiLoaderText');
 
     if (!selectedRooms || !selectedRooms.length) {
-      alert('Nenhum ambiente foi selecionado.');
+      alert('Nenhum item ou ambiente foi selecionado.');
       return;
     }
 
-    var invalidRooms = selectedRooms.filter(function(room) {
-      return !roomsData[room] || !roomsData[room].photos || roomsData[room].photos.length < 3;
+    var invalidItems = selectedRooms.filter(function(room) {
+      var rData = roomsData[room];
+      if (rData.unavailable) return false;
+      var min = getMinPhotosForRoom(room);
+      return (!rData.photos || rData.photos.length < min);
     });
-    if (invalidRooms.length) {
-      alert('Os seguintes ambientes precisam ter pelo menos 3 fotos:\n\n' + invalidRooms.join('\n'));
+
+    if (invalidItems.length) {
+      alert('Os seguintes itens precisam ter o mínimo de fotos ou serem marcados como "Não possui":\n\n' + invalidItems.join('\n'));
       return;
     }
 
@@ -1094,12 +1106,24 @@
     try {
       for (var i = 0; i < selectedRooms.length; i++) {
         var room = selectedRooms[i];
-        var photos = roomsData[room].photos;
+        var rData = roomsData[room];
+
+        if (rData.unavailable) {
+          rData.aiAnalysis = {
+            introducao: 'O item ' + room + ' foi formalmente declarado como INEXISTENTE ou NÃO DISPONÍVEL para conferência no momento da vistoria.',
+            elementos: [{ elemento: room, descricao: 'Não disponível / Inexistente no imóvel inspecionado.', funcionamento: 'Não aplicável', classificacao: 'NÃO POSSUI' }],
+            fotos: [],
+            ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
+          };
+          continue;
+        }
+
+        var photos = rData.photos;
         if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
-        roomsData[room].aiAnalysis = await callGeminiPericialIndividual(room, photos);
+        rData.aiAnalysis = await callGeminiPericialIndividual(room, photos);
       }
 
-      if (aiText) aiText.innerText = 'Todas as análises foram concluídas. Gerando o PDF...';
+      if (aiText) aiText.innerText = 'Análises concluídas. Gerando o PDF pericial...';
       await renderAndGeneratePdf();
 
     } catch (e) {
@@ -1133,7 +1157,6 @@
     var dTermino = document.getElementById('dataTermino').value ? document.getElementById('dataTermino').value.split('-').reverse().join('/') : '';
     var dVistoria = document.getElementById('dataVistoria').value ? document.getElementById('dataVistoria').value.split('-').reverse().join('/') : '';
     var tipoVistoria = (document.querySelector('input[name="tipoVistoria"]:checked') || {}).value || 'Entrada';
-    var clausulaContestacaoOriginal = document.getElementById('clausulaContestacaoOriginal').value.trim();
 
     var wrapper = document.getElementById('pdfTemplateWrapper');
     wrapper.style.display = 'block';
@@ -1158,7 +1181,7 @@
               '<td class="thg-logo"><img src="/logo.png" alt="M&IC"></td>' +
               '<td class="thg-title">' +
                 '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>LAUDO DE VISTORIA DE LOCAÇÃO</div>' +
-                '<div class="laudo-sub-title">' + imovel + ' | Relatório Consolidado</div>' +
+                '<div class="laudo-sub-title">' + imovel + '</div>' +
               '</td>' +
               '<td class="thg-meta">' +
                 '<div><strong>Clicksign:</strong> ' + numContrato + '</div>' +
@@ -1177,8 +1200,8 @@
             '<tr>' +
               '<td class="cad-lbl">Imóvel:</td>' +
               '<td class="cad-val">' + imovel + '</td>' +
-              '<td class="cad-lbl">Ambientes Inspecionados:</td>' +
-              '<td class="cad-val">' + selectedRooms.join(' | ') + '</td>' +
+              '<td class="cad-lbl">Vistoriador Responsável:</td>' +
+              '<td class="cad-val"><strong>' + currentVistoriadorEmail + '</strong></td>' +
             '</tr>' +
             '<tr>' +
               '<td class="cad-lbl">Tipo / Data da Vistoria:</td>' +
@@ -1188,14 +1211,14 @@
             '</tr>' +
           '</table>' +
 
-          '<div class="room-banner">AMBIENTE ' + (idx + 1) + ': ' + roomName.toUpperCase() + '</div>' +
+          '<div class="room-banner">' + (isSpecialItem(roomName) ? 'ITEM TÉCNICO: ' : 'AMBIENTE: ') + roomName.toUpperCase() + '</div>' +
           '<div class="room-intro-text">' + ai.introducao + '</div>' +
 
           '<table class="table-inspection">' +
             '<thead>' +
               '<tr>' +
-                '<th style="width:22%;">ELEMENTO</th>' +
-                '<th style="width:48%;">DESCRIÇÃO E ESTADO DE CONSERVAÇÃO</th>' +
+                '<th style="width:22%;">ELEMENTO / ITEM</th>' +
+                '<th style="width:48%;">DESCRIÇÃO / LEITURA / NÚMERO DE SÉRIE</th>' +
                 '<th style="width:15%;">FUNCIONAMENTO</th>' +
                 '<th style="width:15%;">CLASSIFICAÇÃO</th>' +
               '</tr>' +
@@ -1207,7 +1230,7 @@
         var cClass = 'classif-bom';
         var cUpper = el.classificacao.toUpperCase();
         if (cUpper.indexOf('AVARIA') !== -1 || cUpper.indexOf('QUEBRADO') !== -1) cClass = 'classif-avaria';
-        else if (cUpper.indexOf('ATENÇÃO') !== -1 || cUpper.indexOf('PENDENTE') !== -1 || cUpper.indexOf('REGULAR') !== -1) cClass = 'classif-atencao';
+        else if (cUpper.indexOf('ATENÇÃO') !== -1 || cUpper.indexOf('PENDENTE') !== -1 || cUpper.indexOf('REGULAR') !== -1 || cUpper.indexOf('NÃO POSSUI') !== -1) cClass = 'classif-atencao';
 
         pageHtml += 
           '<tr>' +
@@ -1220,33 +1243,35 @@
 
       pageHtml += 
             '</tbody>' +
-          '</table>' +
+          '</table>';
 
-          '<div class="grid-fotos-report">';
+      if (data.photos.length > 0) {
+        pageHtml += '<div class="grid-fotos-report">';
+        for (var fIdx = 0; fIdx < data.photos.length; fIdx++) {
+          var numFoto = (fIdx + 1) < 10 ? '0' + (fIdx + 1) : (fIdx + 1);
+          var tagCode = 'FOTO ' + prefix + numFoto;
+          var fData = (ai.fotos && ai.fotos[fIdx]) ? ai.fotos[fIdx] : { titulo: 'Registro do Item', descricao: 'Vista técnica do elemento vistoriado.', avaria: false };
 
-      for (var fIdx = 0; fIdx < data.photos.length; fIdx++) {
-        var numFoto = (fIdx + 1) < 10 ? '0' + (fIdx + 1) : (fIdx + 1);
-        var tagCode = 'FOTO ' + prefix + numFoto;
-        var fData = (ai.fotos && ai.fotos[fIdx]) ? ai.fotos[fIdx] : { titulo: 'Registro do Ambiente', descricao: 'Vista técnica do elemento vistoriado.', avaria: false };
+          if (fData.avaria) {
+            tagCode += ' - ATENÇÃO';
+          }
 
-        if (fData.avaria) {
-          tagCode += ' - ATENÇÃO';
+          pageHtml += 
+            '<div class="foto-report-card">' +
+              '<img src="' + data.photos[fIdx] + '">' +
+              '<div class="foto-tag-title">' +
+                '<span>' + fData.titulo + '</span>' +
+                '<span class="foto-badge-num">' + tagCode + '</span>' +
+              '</div>' +
+              '<div class="foto-tag-desc">' + fData.descricao + '</div>' +
+            '</div>';
         }
-
-        pageHtml += 
-          '<div class="foto-report-card">' +
-            '<img src="' + data.photos[fIdx] + '">' +
-            '<div class="foto-tag-title">' +
-              '<span>' + fData.titulo + '</span>' +
-              '<span class="foto-badge-num">' + tagCode + '</span>' +
-            '</div>' +
-            '<div class="foto-tag-desc">' + fData.descricao + '</div>' +
-          '</div>';
+        pageHtml += '</div>';
+      } else {
+        pageHtml += '<div style="font-size:7.5pt; color:#666; font-style:italic; padding:10px; border:1px dashed #ccc; text-align:center; margin-top:8px;">Nenhum registro fotográfico anexado. Item dispensado ou não disponível no momento da vistoria.</div>';
       }
 
       pageHtml += 
-          '</div>' +
-
           '<div class="page-footer-line">' +
             '<div class="page-footer-meta">' +
               '<span>Laudo de Vistoria de Locação | Residencial</span>' +
@@ -1297,35 +1322,32 @@
       finalHtml += '<li><strong>' + rName.toUpperCase() + ':</strong> ' + res + '</li>';
     });
 
-    var contestacaoFinalHtml = '<li style="margin-top:6px;"><strong>REGRAS DE CONTESTAÇÃO DA VISTORIA — conforme o item "LAUDO FOTOGRÁFICO DE VISTORIA PARA FINS DE LOCAÇÃO" do contrato:</strong><br>';
-    if (clausulaContestacaoOriginal) {
-      contestacaoFinalHtml += '<div style="margin-top:5px; padding:7px 9px; border-left:3px solid #c59b27; background:#faf8f2; text-align:justify;">' + escapeHtml(clausulaContestacaoOriginal) + '</div>';
-    } else {
-      contestacaoFinalHtml += '<div style="margin-top:5px;">Não foi localizado no contrato o parágrafo de contestação dentro do item "LAUDO FOTOGRÁFICO DE VISTORIA PARA FINS DE LOCAÇÃO".</div>';
-    }
-    contestacaoFinalHtml += '</li>';
-
+    // Cláusula de contestação expressa de 15 dias após entrega das chaves
     finalHtml += 
-            contestacaoFinalHtml +
+            '<li style="margin-top:8px;"><strong>PRAZO E REGRAS EXPRESSAS DE CONTESTAÇÃO DA VISTORIA:</strong><br>' +
+            '<div style="margin-top:4px; padding:7px 9px; border-left:3px solid #c59b27; background:#faf8f2; text-align:justify;">' +
+            'Fica expressamente fixado o prazo decadencial de <strong>15 (quinze) dias corridos</strong>, contados formalmente a partir da <strong>entrega definitiva das chaves</strong> ao LOCATÁRIO, para que este possa apontar formalmente e por escrito à administração/locador quaisquer divergências, inconformidades ou vícios ocultos não perceptíveis nesta vistoria pericial. Findo esse prazo sem impugnação formal expressa, presumir-se-á aceito o imóvel nas exatas condições descritas e fotografadas neste laudo pericial.' +
+            '</div>' +
+            '</li>' +
           '</ul>' +
         '</div>' +
 
         '<div class="room-banner" style="margin-top:16px;">6. TERMO DE CONCORDÂNCIA E ENCERRAMENTO</div>' +
         '<div class="termo-concordancia-box">' +
           '<p style="margin-bottom:6px;">' +
-            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos e o acervo fotográfico constante neste laudo para os ambientes <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
+            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos, leituras de medidores e o acervo fotográfico constante neste laudo para os ambientes e itens <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
           '</p>' +
           '<p style="margin-bottom:6px;">' +
-            'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas.' +
+            'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas[cite: 1].' +
           '</p>' +
           '<p style="color:#555; font-size:7.1pt;">' +
-            'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>, dispensando assinaturas físicas manuscritas adicionais.' +
+            'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>[cite: 1], inspecionado pelo vistoriador <strong>' + currentVistoriadorEmail + '</strong>, dispensando assinaturas físicas manuscritas adicionais[cite: 1].' +
           '</p>' +
         '</div>' +
 
         '<div class="laudo-copyright-notice">' +
-          '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.<br>' +
-          'A reprodução, distribuição ou utilização deste modelo e sistema necessita de autorização prévia e expressa.' +
+          '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.[cite: 1]<br>' +
+          'A reprodução, distribuição ou utilização deste modelo e sistema necessita de autorização prévia e expressa.[cite: 1]' +
         '</div>' +
 
         '<div class="page-footer-line">' +
@@ -1335,7 +1357,7 @@
             '<span>Data de Vistoria: ' + dVistoria + '</span>' +
           '</div>' +
           '<div class="page-footer-copy">' +
-            'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
+            'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.[cite: 1]' +
           '</div>' +
         '</div>' +
       '</div>';
