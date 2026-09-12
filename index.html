@@ -166,7 +166,7 @@
     background: #fff;
     color: #111;
     font-family: Arial, Helvetica, sans-serif;
-    padding: 9mm 11mm 9mm 11mm;
+    padding: 8mm 11mm 8mm 11mm;
     margin: 0 auto;
     box-sizing: border-box;
     page-break-after: always;
@@ -194,7 +194,7 @@
     height: 100%;
   }
 
-  /* CABEÇALHO PERICIAL TABULAR BLINDADO */
+  /* CABEÇALHO PERICIAL TABULAR */
   .table-header-grid {
     width: 100%;
     table-layout: fixed;
@@ -251,16 +251,16 @@
     color: #121315;
   }
 
-  .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.2pt; background: rgba(255,255,255,0.9); }
+  .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 7.2pt; background: rgba(255,255,255,0.9); }
   .table-cadastral td { border: 1px solid #c0c0c0; padding: 3px 5px; }
   .table-cadastral .cad-lbl { background: #faf6ec; font-weight: bold; width: 19%; color: #8a6a12; border-color: #d8ceb8; }
   .table-cadastral .cad-val { width: 31%; color: #111; }
 
-  .room-banner { background: linear-gradient(90deg, #121315, #24272c); color: #dfba48; border-left: 4px solid #c59b27; font-size: 8.8pt; font-weight: bold; padding: 4px 8px; text-transform: uppercase; margin-top: 6px; margin-bottom: 4px; border-radius: 2px; }
-  .room-intro-text { font-size: 7.2pt; color: #333; margin-bottom: 6px; font-style: italic; line-height: 1.2; }
+  .room-banner { background: linear-gradient(90deg, #121315, #24272c); color: #dfba48; border-left: 4px solid #c59b27; font-size: 8.6pt; font-weight: bold; padding: 4px 8px; text-transform: uppercase; margin-top: 5px; margin-bottom: 4px; border-radius: 2px; }
+  .room-intro-text { font-size: 7pt; color: #333; margin-bottom: 5px; font-style: italic; line-height: 1.2; }
 
-  .table-inspection { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7pt; background: rgba(255,255,255,0.9); }
-  .table-inspection th { background: #fbf8f0; border: 1px solid #d4cbb5; padding: 3.5px 4px; text-align: left; font-weight: bold; color: #73570e; }
+  .table-inspection { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 6.8pt; background: rgba(255,255,255,0.9); }
+  .table-inspection th { background: #fbf8f0; border: 1px solid #d4cbb5; padding: 3px 4px; text-align: left; font-weight: bold; color: #73570e; }
   .table-inspection td { border: 1px solid #ccc; padding: 3px 4px; vertical-align: top; line-height: 1.2; }
   .classif-bom { font-weight: bold; color: #006622; }
   .classif-atencao { font-weight: bold; color: #c0392b; }
@@ -272,6 +272,46 @@
   .foto-tag-title { font-size: 6.8pt; font-weight: bold; color: #0f2027; margin-top: 2.5px; display: flex; justify-content: space-between; align-items: center; }
   .foto-badge-num { background: #faf4e3; color: #8a6a12; border: 1px solid #dfba48; padding: 1px 4px; border-radius: 2px; font-size: 6.2pt; font-weight: bold; }
   .foto-tag-desc { font-size: 6pt; color: #444; margin-top: 1.5px; line-height: 1.15; }
+
+  /* SUBGRUPOS DA PÁGINA TÉCNICA CONSOLIDADA */
+  .special-subgroup-card {
+    border: 1px solid #dcd7ca;
+    background: rgba(253, 252, 249, 0.95);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 7px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .special-subgroup-header {
+    background: #faf6ec;
+    border-left: 3.5px solid #c59b27;
+    color: #73570e;
+    font-size: 7.6pt;
+    font-weight: bold;
+    padding: 2.5px 6px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .special-subgroup-content {
+    flex: 1;
+  }
+  .special-subgroup-photo {
+    width: 140px;
+    height: 98px;
+    border: 1px solid #ced4da;
+    background: #f8f9fa;
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .special-subgroup-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 
   .page-footer-line { position: absolute; bottom: 5mm; left: 11mm; right: 11mm; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #ddd; padding-top: 3px; background: #fff; }
   .page-footer-meta { display: flex; justify-content: space-between; font-size: 6.5pt; color: #777; }
@@ -411,7 +451,7 @@
     </div>
   </div>
 
-  <!-- ETAPA 2: AMBIENTES (CÔMODOS EM CIMA, ITENS ESPECIAIS EMBAIXO) -->
+  <!-- ETAPA 2: AMBIENTES (CÔMODOS PRIMEIRO, ITENS TÉCNICOS DEPOIS) -->
   <div id="step-rooms" class="step">
     <div class="card">
       <h2>2. Seleção de Ambientes e Itens Técnicos</h2>
@@ -457,7 +497,6 @@
       </label>
       <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
-      <!-- Botão para itens técnicos especiais -->
       <button type="button" id="btnToggleUnavailable" class="btn btn-not-available" style="display:none;" onclick="toggleRoomUnavailable()">
         Marcar como: "Não possui / Não disponível no imóvel"
       </button>
@@ -876,9 +915,9 @@
 
   function getRoomPrefix(roomName) {
     var r = cleanSearch(roomName);
-    if (r.indexOf("relogio") !== -1 || r.indexOf("luz") !== -1) return "LUZ_";
-    if (r.indexOf("gas") !== -1) return "GAS_";
-    if (r.indexOf("chaves") !== -1) return "CHV_";
+    if (r.indexOf("relogio") !== -1 || r.indexOf("luz") !== -1) return "LUZ";
+    if (r.indexOf("gas") !== -1) return "GAS";
+    if (r.indexOf("chaves") !== -1) return "CHV";
     if (r.indexOf("sala") !== -1) return "S";
     if (r.indexOf("banheiro") !== -1) return "B";
     if (r.indexOf("suite") !== -1) return "ST";
@@ -894,7 +933,6 @@
   }
 
   function startPhotoStep() {
-    // Ordem estrita: cômodos normais primeiro, depois os itens técnicos especiais
     var normalCheckboxes = document.querySelectorAll('#roomsGrid input[type="checkbox"]:checked');
     var specialCheckboxes = document.querySelectorAll('#specialRoomsGrid input[type="checkbox"]:checked');
     
@@ -1166,10 +1204,16 @@
     wrapper.style.display = 'block';
     wrapper.innerHTML = '';
 
-    var totalPages = selectedRooms.length + 1;
+    // Separa cômodos normais e itens técnicos
+    var normalRooms = selectedRooms.filter(function(r) { return !isSpecialItem(r); });
+    var specialRooms = selectedRooms.filter(function(r) { return isSpecialItem(r); });
+
+    // Total de páginas = cômodos normais + (1 se houver itens especiais) + 1 página final
+    var totalPages = normalRooms.length + (specialRooms.length > 0 ? 1 : 0) + 1;
     var pageNum = 1;
 
-    selectedRooms.forEach(function(roomName, idx) {
+    // 1. PÁGINAS DOS CÔMODOS NORMAIS (1 página por ambiente)
+    normalRooms.forEach(function(roomName, idx) {
       var data = roomsData[roomName];
       var ai = data.aiAnalysis;
       var prefix = getRoomPrefix(roomName);
@@ -1215,14 +1259,14 @@
             '</tr>' +
           '</table>' +
 
-          '<div class="room-banner">' + (isSpecialItem(roomName) ? 'ITEM TÉCNICO: ' : 'AMBIENTE: ') + roomName.toUpperCase() + '</div>' +
+          '<div class="room-banner">AMBIENTE ' + (idx + 1) + ': ' + roomName.toUpperCase() + '</div>' +
           '<div class="room-intro-text">' + ai.introducao + '</div>' +
 
           '<table class="table-inspection">' +
             '<thead>' +
               '<tr>' +
-                '<th style="width:22%;">ELEMENTO / ITEM</th>' +
-                '<th style="width:48%;">DESCRIÇÃO / LEITURA / NÚMERO DE SÉRIE</th>' +
+                '<th style="width:22%;">ELEMENTO</th>' +
+                '<th style="width:48%;">DESCRIÇÃO E ESTADO DE CONSERVAÇÃO</th>' +
                 '<th style="width:15%;">FUNCIONAMENTO</th>' +
                 '<th style="width:15%;">CLASSIFICAÇÃO</th>' +
               '</tr>' +
@@ -1234,7 +1278,7 @@
         var cClass = 'classif-bom';
         var cUpper = el.classificacao.toUpperCase();
         if (cUpper.indexOf('AVARIA') !== -1 || cUpper.indexOf('QUEBRADO') !== -1) cClass = 'classif-avaria';
-        else if (cUpper.indexOf('ATENÇÃO') !== -1 || cUpper.indexOf('PENDENTE') !== -1 || cUpper.indexOf('REGULAR') !== -1 || cUpper.indexOf('NÃO POSSUI') !== -1) cClass = 'classif-atencao';
+        else if (cUpper.indexOf('ATENÇÃO') !== -1 || cUpper.indexOf('PENDENTE') !== -1 || cUpper.indexOf('REGULAR') !== -1) cClass = 'classif-atencao';
 
         pageHtml += 
           '<tr>' +
@@ -1247,35 +1291,33 @@
 
       pageHtml += 
             '</tbody>' +
-          '</table>';
+          '</table>' +
 
-      if (data.photos.length > 0) {
-        pageHtml += '<div class="grid-fotos-report">';
-        for (var fIdx = 0; fIdx < data.photos.length; fIdx++) {
-          var numFoto = (fIdx + 1) < 10 ? '0' + (fIdx + 1) : (fIdx + 1);
-          var tagCode = 'FOTO ' + prefix + numFoto;
-          var fData = (ai.fotos && ai.fotos[fIdx]) ? ai.fotos[fIdx] : { titulo: 'Registro do Item', descricao: 'Vista técnica do elemento vistoriado.', avaria: false };
+          '<div class="grid-fotos-report">';
 
-          if (fData.avaria) {
-            tagCode += ' - ATENÇÃO';
-          }
+      for (var fIdx = 0; fIdx < data.photos.length; fIdx++) {
+        var numFoto = (fIdx + 1) < 10 ? '0' + (fIdx + 1) : (fIdx + 1);
+        var tagCode = 'FOTO ' + prefix + numFoto;
+        var fData = (ai.fotos && ai.fotos[fIdx]) ? ai.fotos[fIdx] : { titulo: 'Registro do Ambiente', descricao: 'Vista técnica do elemento vistoriado.', avaria: false };
 
-          pageHtml += 
-            '<div class="foto-report-card">' +
-              '<img src="' + data.photos[fIdx] + '">' +
-              '<div class="foto-tag-title">' +
-                '<span>' + fData.titulo + '</span>' +
-                '<span class="foto-badge-num">' + tagCode + '</span>' +
-              '</div>' +
-              '<div class="foto-tag-desc">' + fData.descricao + '</div>' +
-            '</div>';
+        if (fData.avaria) {
+          tagCode += ' - ATENÇÃO';
         }
-        pageHtml += '</div>';
-      } else {
-        pageHtml += '<div style="font-size:7.5pt; color:#666; font-style:italic; padding:10px; border:1px dashed #ccc; text-align:center; margin-top:8px;">Nenhum registro fotográfico anexado. Item dispensado ou não disponível no momento da vistoria.</div>';
+
+        pageHtml += 
+          '<div class="foto-report-card">' +
+            '<img src="' + data.photos[fIdx] + '">' +
+            '<div class="foto-tag-title">' +
+              '<span>' + fData.titulo + '</span>' +
+              '<span class="foto-badge-num">' + tagCode + '</span>' +
+            '</div>' +
+            '<div class="foto-tag-desc">' + fData.descricao + '</div>' +
+          '</div>';
       }
 
       pageHtml += 
+          '</div>' +
+
           '<div class="page-footer-line">' +
             '<div class="page-footer-meta">' +
               '<span>Laudo de Vistoria de Locação | Residencial</span>' +
@@ -1293,6 +1335,95 @@
       pageNum++;
     });
 
+    // 2. PÁGINA ÚNICA CONSOLIDADA DE ITENS TÉCNICOS ESPECIAIS (SE HOUVER)
+    if (specialRooms.length > 0) {
+      var specialPage = document.createElement('div');
+      specialPage.className = 'laudo-page';
+
+      var specialHtml = 
+        '<img class="laudo-watermark" src="/marca-dagua.png" alt="Marca d água">' +
+        '<div class="laudo-content-layer">' +
+          '<table class="table-header-grid">' +
+            '<tr>' +
+              '<td class="thg-logo"><img src="/logo.png" alt="M&IC"></td>' +
+              '<td class="thg-title">' +
+                '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>ITENS TÉCNICOS ESPECIAIS & MEDIDORES</div>' +
+                '<div class="laudo-sub-title">' + imovel + '</div>' +
+              '</td>' +
+              '<td class="thg-meta">' +
+                '<div><strong>Clicksign:</strong> ' + numContrato + '</div>' +
+                '<div><strong>Vistoria:</strong> ' + tipoVistoria.toUpperCase() + ' &nbsp;|&nbsp; <strong>Data:</strong> ' + dVistoria + '</div>' +
+              '</td>' +
+            '</tr>' +
+          '</table>' +
+
+          '<div class="room-banner" style="margin-bottom:6px;">4. REGISTRO TÉCNICO: RELÓGIO DE LUZ, GÁS E CHAVES</div>';
+
+      specialRooms.forEach(function(sName) {
+        var sData = roomsData[sName];
+        var sAi = sData.aiAnalysis;
+        var sPrefix = getRoomPrefix(sName);
+        var elMain = (sAi.elementos && sAi.elementos[0]) ? sAi.elementos[0] : { elemento: sName, descricao: 'Item vistoriado.', funcionamento: 'Em ordem', classificacao: 'BOM' };
+
+        var photoSrc = (sData.photos && sData.photos[0]) ? sData.photos[0] : null;
+
+        specialHtml += 
+          '<div class="special-subgroup-card">' +
+            '<div class="special-subgroup-content">' +
+              '<div class="special-subgroup-header">' + sName.toUpperCase() + (sData.unavailable ? ' — NÃO POSSUI / INDISPONÍVEL' : '') + '</div>' +
+              '<table class="table-inspection" style="margin-bottom:0;">' +
+                '<thead>' +
+                  '<tr>' +
+                    '<th style="width:25%;">ITEM</th>' +
+                    '<th style="width:50%;">LEITURA / NÚMERO / ESPECIFICAÇÃO</th>' +
+                    '<th style="width:25%;">STATUS</th>' +
+                  '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                  '<tr>' +
+                    '<td><strong>' + sName + '</strong></td>' +
+                    '<td>' + elMain.descricao + '</td>' +
+                    '<td><span class="' + (sData.unavailable ? 'classif-atencao' : 'classif-bom') + '">' + elMain.classificacao + '</span></td>' +
+                  '</tr>' +
+                '</tbody>' +
+              '</table>' +
+            '</div>';
+
+        if (photoSrc) {
+          specialHtml += 
+            '<div class="special-subgroup-photo">' +
+              '<img src="' + photoSrc + '">' +
+              '<span style="position:absolute;bottom:2px;right:3px;background:rgba(0,0,0,0.7);color:#dfba48;font-size:6.2pt;padding:1px 3px;border-radius:2px;font-weight:bold;">' + sPrefix + '</span>' +
+            '</div>';
+        } else {
+          specialHtml += 
+            '<div class="special-subgroup-photo" style="display:flex;align-items:center;justify-content:center;font-size:6.5pt;color:#888;text-align:center;padding:4px;line-height:1.2;">' +
+              'Sem foto anexada<br>(Não disponível)' +
+            '</div>';
+        }
+
+        specialHtml += '</div>';
+      });
+
+      specialHtml += 
+          '<div class="page-footer-line">' +
+            '<div class="page-footer-meta">' +
+              '<span>Laudo de Vistoria de Locação | Residencial</span>' +
+              '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
+              '<span>Data de Vistoria: ' + dVistoria + '</span>' +
+            '</div>' +
+            '<div class="page-footer-copy">' +
+              'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.[cite: 1]' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      specialPage.innerHTML = specialHtml;
+      wrapper.appendChild(specialPage);
+      pageNum++;
+    }
+
+    // 3. PÁGINA FINAL DE OBSERVAÇÕES, CONTESTAÇÃO E ENCERRAMENTO
     var finalPage = document.createElement('div');
     finalPage.className = 'laudo-page';
 
