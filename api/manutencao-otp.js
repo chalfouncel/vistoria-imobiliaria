@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -12,52 +10,102 @@ export default async function handler(req, res) {
     const targetEmail = 'chalfouncel@gmail.com';
 
     if (!supabaseUrl || !serviceKey || !resendApiKey) {
-      return res.status(500).json({ error: 'Variáveis de ambiente incompletas.' });
+      return res.status(500).json({ error: 'Variáveis de ambiente incompletas na Vercel.' });
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
-
-    // 1. Gera código numérico de uso único de 6 dígitos
+    // 1. Gera senha aleatória única de 6 dígitos
     const tempPassword = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 2. Define a expiração para exatamente 30 minutos a partir de agora
+    // 2. Calcula expiração para exatamente 30 minutos
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 30);
 
     const emailManutencao = 'manutencao@vistoriafacil.com';
-    const { data: usersData, error: userError } = await supabaseAdmin.auth.admin.listUsers();
-    if (userError) throw userError;
 
-    let maintenanceUser = usersData.users.find(u => u.email === emailManutencao);
+    // 3. Localiza ou cria o usuário diretamente via API REST de Admin do Supabase
+    const listUsersRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`
+      }
+    });
 
-    if (!maintenanceUser) {
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: emailManutencao,
-        password: tempPassword,
-        email_confirm: true
-      });
-      if (createError) throw createError;
-      maintenanceUser = newUser.user;
-    } else {
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(maintenanceUser.id, {
-        password: tempPassword
-      });
-      if (updateError) throw updateError;
+    if (!listUsersRes.ok) {
+      const errTxt = await listUsersRes.text();
+      return res.status(500).json({ error: 'Erro ao consultar usuários no Supabase', details: errTxt });
     }
 
-    // 3. Atualiza o perfil para ativo por 30 minutos com role 'manutencao'
-    await supabaseAdmin
-      .from('profiles')
-      .upsert({
+    const { users } = await listUsersRes.json();
+    let maintenanceUser = users.find(u => u.email === emailManutencao);
+
+    if (!maintenanceUser) {
+      // Cria o usuário
+      const createUserRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: emailManutencao,
+          password: tempPassword,
+          email_confirm: true
+        })
+      });
+
+      if (!createUserRes.ok) {
+        const errTxt = await createUserRes.text();
+        return res.status(500).json({ error: 'Erro ao criar usuário de manutenção', details: errTxt });
+      }
+
+      maintenanceUser = await createUserRes.json();
+    } else {
+      // Atualiza a senha do usuário existente
+      const updateUserRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${maintenanceUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          password: tempPassword
+        })
+      });
+
+      if (!updateUserRes.ok) {
+        const errTxt = await updateUserRes.text();
+        return res.status(500).json({ error: 'Erro ao atualizar senha no Supabase', details: errTxt });
+      }
+    }
+
+    // 4. Grava na tabela profiles com role 'manutencao' e expiração de 30 min
+    const profileRes = await fetch(`${supabaseUrl}/rest/v1/profiles`, {
+      method: 'POST',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
         id: maintenanceUser.id,
         email: emailManutencao,
         role: 'manutencao',
         subscription_status: 'ativo',
         subscription_expires_at: expiresAt.toISOString()
-      });
+      })
+    });
 
-    // 4. Dispara e-mail com o código
-    const resendResponse = await fetch('https://api.resend.com/emails', {
+    if (!profileRes.ok) {
+      const errTxt = await profileRes.text();
+      return res.status(500).json({ error: 'Erro ao atualizar profile no Supabase', details: errTxt });
+    }
+
+    // 5. Dispara o e-mail via Resend
+    const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${resendApiKey}`,
@@ -80,9 +128,9 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!resendResponse.ok) {
-      const errBody = await resendResponse.text();
-      return res.status(500).json({ error: 'Erro Resend', details: errBody });
+    if (!resendRes.ok) {
+      const errTxt = await resendRes.text();
+      return res.status(500).json({ error: 'Erro Resend ao enviar e-mail', details: errTxt });
     }
 
     return res.status(200).json({ success: true, message: 'Código de 30 min enviado com sucesso!' });
