@@ -147,12 +147,51 @@
   }
   .laudo-page:last-child { page-break-after: auto; }
 
-  .laudo-header { border-bottom: 2.5px solid #c59b27; padding-bottom: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-end; }
-  .laudo-main-title { font-size: 12.5pt; font-weight: bold; color: #121315; text-transform: uppercase; letter-spacing: 0.2px; line-height: 1.15; }
-  .laudo-sub-title { font-size: 7.5pt; color: #555; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
-  .laudo-meta-box { font-size: 7.2pt; text-align: right; color: #333; line-height: 1.25; }
+  /* MARCA D'ÁGUA CENTRALIZADA NO FUNDO DA FOLHA A4 */
+  .laudo-watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-12deg);
+    width: 145mm;
+    height: auto;
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: 0;
+  }
 
-  .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.6pt; }
+  .laudo-content-layer {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+  }
+
+  .laudo-header { 
+    border-bottom: 2.5px solid #c59b27; 
+    padding-bottom: 6px; 
+    margin-bottom: 8px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    gap: 10px;
+  }
+  .laudo-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .laudo-header-logo {
+    max-height: 38px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .laudo-main-title { font-size: 11.5pt; font-weight: bold; color: #121315; text-transform: uppercase; letter-spacing: 0.2px; line-height: 1.15; }
+  .laudo-sub-title { font-size: 7.2pt; color: #555; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
+  .laudo-meta-box { font-size: 7.2pt; text-align: right; color: #333; line-height: 1.25; min-width: 180px; }
+
+  .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.6pt; background: rgba(255,255,255,0.9); }
   .table-cadastral td { border: 1px solid #c0c0c0; padding: 3.5px 5px; }
   .table-cadastral .cad-lbl { background: #faf6ec; font-weight: bold; width: 18%; color: #8a6a12; border-color: #d8ceb8; }
   .table-cadastral .cad-val { width: 32%; color: #111; }
@@ -160,7 +199,7 @@
   .room-banner { background: linear-gradient(90deg, #121315, #24272c); color: #dfba48; border-left: 4px solid #c59b27; font-size: 8.8pt; font-weight: bold; padding: 4px 8px; text-transform: uppercase; margin-top: 6px; margin-bottom: 4px; border-radius: 2px; }
   .room-intro-text { font-size: 7.2pt; color: #333; margin-bottom: 6px; font-style: italic; line-height: 1.2; }
 
-  .table-inspection { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7pt; }
+  .table-inspection { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7pt; background: rgba(255,255,255,0.9); }
   .table-inspection th { background: #fbf8f0; border: 1px solid #d4cbb5; padding: 3.5px 4px; text-align: left; font-weight: bold; color: #73570e; }
   .table-inspection td { border: 1px solid #ccc; padding: 3px 4px; vertical-align: top; line-height: 1.2; }
   .classif-bom { font-weight: bold; color: #006622; }
@@ -174,7 +213,7 @@
   .foto-badge-num { background: #faf4e3; color: #8a6a12; border: 1px solid #dfba48; padding: 1px 4px; border-radius: 2px; font-size: 6.2pt; font-weight: bold; }
   .foto-tag-desc { font-size: 6pt; color: #444; margin-top: 1.5px; line-height: 1.15; }
 
-  .page-footer-line { position: absolute; bottom: 5mm; left: 12mm; right: 12mm; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #ddd; padding-top: 3px; }
+  .page-footer-line { position: absolute; bottom: 5mm; left: 12mm; right: 12mm; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #ddd; padding-top: 3px; background: #fff; }
   .page-footer-meta { display: flex; justify-content: space-between; font-size: 6.5pt; color: #777; }
   .page-footer-copy { text-align: center; font-size: 5.8pt; color: #888; letter-spacing: 0.2px; }
 
@@ -1058,50 +1097,55 @@
       page.className = 'laudo-page';
       
       var pageHtml = 
-        '<div class="laudo-header">' +
-          '<div>' +
-            '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>LAUDO DE VISTORIA DE LOCAÇÃO</div>' +
-            '<div class="laudo-sub-title">' + imovel + ' | Descrição Técnica e Relatório Fotográfico Consolidado</div>' +
+        '<img class="laudo-watermark" src="/marca-dagua.jpg" alt="Marca d água">' +
+        '<div class="laudo-content-layer">' +
+          '<div class="laudo-header">' +
+            '<div class="laudo-header-left">' +
+              '<img class="laudo-header-logo" src="/logo.jpg" alt="M&IC">' +
+              '<div>' +
+                '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>LAUDO DE VISTORIA DE LOCAÇÃO</div>' +
+                '<div class="laudo-sub-title">' + imovel + ' | Descrição Técnica e Relatório Fotográfico Consolidado</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="laudo-meta-box">' +
+              '<span class="clicksign-inline"><strong>Clicksign:</strong> ' + numContrato + ' &nbsp;|&nbsp; <strong>Vistoria:</strong> ' + tipoVistoria.toUpperCase() + ' &nbsp;|&nbsp; <strong>Data:</strong> ' + dVistoria + '</span>' +
+            '</div>' +
           '</div>' +
-          '<div class="laudo-meta-box">' +
-            '<span class="clicksign-inline"><strong>Clicksign:</strong> ' + numContrato + ' &nbsp;|&nbsp; <strong>Vistoria:</strong> ' + tipoVistoria.toUpperCase() + ' &nbsp;|&nbsp; <strong>Data:</strong> ' + dVistoria + '</span>' +
-          '</div>' +
-        '</div>' +
 
-        '<table class="table-cadastral">' +
-          '<tr>' +
-            '<td class="cad-lbl">Locador/Proprietário:</td>' +
-            '<td class="cad-val"><strong>' + locador + '</strong></td>' +
-            '<td class="cad-lbl">Locatário(a):</td>' +
-            '<td class="cad-val"><strong>' + locatario + '</strong></td>' +
-          '</tr>' +
-          '<tr>' +
-            '<td class="cad-lbl">Imóvel:</td>' +
-            '<td class="cad-val">' + imovel + '</td>' +
-            '<td class="cad-lbl">Ambientes Inspecionados:</td>' +
-            '<td class="cad-val">' + selectedRooms.join(' | ') + '</td>' +
-          '</tr>' +
-          '<tr>' +
-            '<td class="cad-lbl">Tipo / Data da Vistoria:</td>' +
-            '<td class="cad-val"><strong>' + tipoVistoria.toUpperCase() + '</strong> — ' + dVistoria + '</td>' +
-            '<td class="cad-lbl">Vigência Contrato:</td>' +
-            '<td class="cad-val">' + dInicio + ' a ' + dTermino + '</td>' +
-          '</tr>' +
-        '</table>' +
-
-        '<div class="room-banner">AMBIENTE ' + (idx + 1) + ': ' + roomName.toUpperCase() + '</div>' +
-        '<div class="room-intro-text">' + ai.introducao + '</div>' +
-
-        '<table class="table-inspection">' +
-          '<thead>' +
+          '<table class="table-cadastral">' +
             '<tr>' +
-              '<th style="width:22%;">ELEMENTO</th>' +
-              '<th style="width:48%;">DESCRIÇÃO E ESTADO DE CONSERVAÇÃO</th>' +
-              '<th style="width:15%;">FUNCIONAMENTO</th>' +
-              '<th style="width:15%;">CLASSIFICAÇÃO</th>' +
+              '<td class="cad-lbl">Locador/Proprietário:</td>' +
+              '<td class="cad-val"><strong>' + locador + '</strong></td>' +
+              '<td class="cad-lbl">Locatário(a):</td>' +
+              '<td class="cad-val"><strong>' + locatario + '</strong></td>' +
             '</tr>' +
-          '</thead>' +
-          '<tbody>';
+            '<tr>' +
+              '<td class="cad-lbl">Imóvel:</td>' +
+              '<td class="cad-val">' + imovel + '</td>' +
+              '<td class="cad-lbl">Ambientes Inspecionados:</td>' +
+              '<td class="cad-val">' + selectedRooms.join(' | ') + '</td>' +
+            '</tr>' +
+            '<tr>' +
+              '<td class="cad-lbl">Tipo / Data da Vistoria:</td>' +
+              '<td class="cad-val"><strong>' + tipoVistoria.toUpperCase() + '</strong> — ' + dVistoria + '</td>' +
+              '<td class="cad-lbl">Vigência Contrato:</td>' +
+              '<td class="cad-val">' + dInicio + ' a ' + dTermino + '</td>' +
+            '</tr>' +
+          '</table>' +
+
+          '<div class="room-banner">AMBIENTE ' + (idx + 1) + ': ' + roomName.toUpperCase() + '</div>' +
+          '<div class="room-intro-text">' + ai.introducao + '</div>' +
+
+          '<table class="table-inspection">' +
+            '<thead>' +
+              '<tr>' +
+                '<th style="width:22%;">ELEMENTO</th>' +
+                '<th style="width:48%;">DESCRIÇÃO E ESTADO DE CONSERVAÇÃO</th>' +
+                '<th style="width:15%;">FUNCIONAMENTO</th>' +
+                '<th style="width:15%;">CLASSIFICAÇÃO</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>';
 
       for (var eIdx = 0; eIdx < ai.elementos.length; eIdx++) {
         var el = ai.elementos[eIdx];
@@ -1120,10 +1164,10 @@
       }
 
       pageHtml += 
-          '</tbody>' +
-        '</table>' +
+            '</tbody>' +
+          '</table>' +
 
-        '<div class="grid-fotos-report">';
+          '<div class="grid-fotos-report">';
 
       for (var fIdx = 0; fIdx < data.photos.length; fIdx++) {
         var numFoto = (fIdx + 1) < 10 ? '0' + (fIdx + 1) : (fIdx + 1);
@@ -1146,16 +1190,17 @@
       }
 
       pageHtml += 
-        '</div>' +
-
-        '<div class="page-footer-line">' +
-          '<div class="page-footer-meta">' +
-            '<span>Laudo de Vistoria de Locação | Residencial</span>' +
-            '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
-            '<span>Data de Vistoria: ' + dVistoria + '</span>' +
           '</div>' +
-          '<div class="page-footer-copy">' +
-            'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
+
+          '<div class="page-footer-line">' +
+            '<div class="page-footer-meta">' +
+              '<span>Laudo de Vistoria de Locação | Residencial</span>' +
+              '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
+              '<span>Data de Vistoria: ' + dVistoria + '</span>' +
+            '</div>' +
+            '<div class="page-footer-copy">' +
+              'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
+            '</div>' +
           '</div>' +
         '</div>';
 
@@ -1168,24 +1213,29 @@
     finalPage.className = 'laudo-page';
 
     var finalHtml = 
-      '<div class="laudo-header">' +
-        '<div>' +
-          '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>OBSERVAÇÕES E RESSALVAS CONSOLIDADAS</div>' +
-          '<div class="laudo-sub-title">' + imovel + '</div>' +
+      '<img class="laudo-watermark" src="/marca-dagua.jpg" alt="Marca d água">' +
+      '<div class="laudo-content-layer">' +
+        '<div class="laudo-header">' +
+          '<div class="laudo-header-left">' +
+            '<img class="laudo-header-logo" src="/logo.jpg" alt="M&IC">' +
+            '<div>' +
+              '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>OBSERVAÇÕES E RESSALVAS CONSOLIDADAS</div>' +
+              '<div class="laudo-sub-title">' + imovel + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="laudo-meta-box">' +
+            '<strong>Doc Clicksign:</strong> ' + numContrato + '<br>' +
+            '<strong>Data Vistoria:</strong> ' + dVistoria +
+          '</div>' +
         '</div>' +
-        '<div class="laudo-meta-box">' +
-          '<strong>Doc Clicksign:</strong> ' + numContrato + '<br>' +
-          '<strong>Data Vistoria:</strong> ' + dVistoria +
+
+        '<div class="room-banner">5. OBSERVAÇÕES E RESSALVAS TÉCNICAS CONSOLIDADAS</div>' +
+        '<div style="font-size:7.4pt; font-weight:bold; color:#444; margin-top:3px; margin-bottom:3px;">' +
+          'APONTAMENTOS TÉCNICOS REGISTRADOS PARA SALVAGUARDA DE LOCADOR E LOCATÁRIO:' +
         '</div>' +
-      '</div>' +
 
-      '<div class="room-banner">5. OBSERVAÇÕES E RESSALVAS TÉCNICAS CONSOLIDADAS</div>' +
-      '<div style="font-size:7.4pt; font-weight:bold; color:#444; margin-top:3px; margin-bottom:3px;">' +
-        'APONTAMENTOS TÉCNICOS REGISTRADOS PARA SALVAGUARDA DE LOCADOR E LOCATÁRIO:' +
-      '</div>' +
-
-      '<div class="box-ressalvas">' +
-        '<ul>';
+        '<div class="box-ressalvas">' +
+          '<ul>';
 
     selectedRooms.forEach(function(rName) {
       var res = roomsData[rName].aiAnalysis.ressalvas;
@@ -1201,33 +1251,37 @@
     contestacaoFinalHtml += '</li>';
 
     finalHtml += 
-          contestacaoFinalHtml +
-        '</ul>' +
-      '</div>' +
-
-      '<div class="room-banner" style="margin-top:20px;">6. TERMO DE CONCORDÂNCIA E ENCERRAMENTO</div>' +
-      '<div class="termo-concordancia-box">' +
-        '<p style="margin-bottom:8px;">' +
-          'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos e o acervo fotográfico constante neste laudo para os ambientes <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
-        '</p>' +
-        '<p style="color:#555; font-size:7.2pt;">' +
-          'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>, dispensando assinaturas físicas manuscritas.' +
-        '</p>' +
-      '</div>' +
-
-      '<div class="laudo-copyright-notice">' +
-        '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.<br>' +
-        'A reprodução, distribuição ou utilização deste modelo e sistema necessita de autorização prévia e expressa.' +
-      '</div>' +
-
-      '<div class="page-footer-line">' +
-        '<div class="page-footer-meta">' +
-          '<span>Laudo de Vistoria de Locação | Residencial</span>' +
-          '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
-          '<span>Data de Vistoria: ' + dVistoria + '</span>' +
+            contestacaoFinalHtml +
+          '</ul>' +
         '</div>' +
-        '<div class="page-footer-copy">' +
-          'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
+
+        '<div class="room-banner" style="margin-top:16px;">6. TERMO DE CONCORDÂNCIA E ENCERRAMENTO</div>' +
+        '<div class="termo-concordancia-box">' +
+          '<p style="margin-bottom:6px;">' +
+            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos e o acervo fotográfico constante neste laudo para os ambientes <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
+          '</p>' +
+          '<p style="margin-bottom:6px;">' +
+            'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas.' +
+          '</p>' +
+          '<p style="color:#555; font-size:7.1pt;">' +
+            'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>, dispensando assinaturas físicas manuscritas adicionais.' +
+          '</p>' +
+        '</div>' +
+
+        '<div class="laudo-copyright-notice">' +
+          '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.<br>' +
+          'A reprodução, distribuição ou utilização deste modelo e sistema necessita de autorização prévia e expressa.' +
+        '</div>' +
+
+        '<div class="page-footer-line">' +
+          '<div class="page-footer-meta">' +
+            '<span>Laudo de Vistoria de Locação | Residencial</span>' +
+            '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
+            '<span>Data de Vistoria: ' + dVistoria + '</span>' +
+          '</div>' +
+          '<div class="page-footer-copy">' +
+            'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
+          '</div>' +
         '</div>' +
       '</div>';
 
