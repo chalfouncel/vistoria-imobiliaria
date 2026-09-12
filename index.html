@@ -101,6 +101,23 @@
   .photo-gallery { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
   .photo-card { position: relative; border-radius: 6px; overflow: hidden; border: 1px solid #ced4da; height: 90px; background: #000; }
   .photo-card img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-delete-btn {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    background: rgba(220, 53, 69, 0.9);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
   .photo-counter { font-size: 0.85rem; font-weight: 700; text-align: center; margin-top: 10px; }
 
   .badge { background: #007bff; color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; }
@@ -273,13 +290,13 @@
   .foto-badge-num { background: #faf4e3; color: #8a6a12; border: 1px solid #dfba48; padding: 1px 4px; border-radius: 2px; font-size: 6.2pt; font-weight: bold; }
   .foto-tag-desc { font-size: 6pt; color: #444; margin-top: 1.5px; line-height: 1.15; }
 
-  /* SUBGRUPOS DA PÁGINA TÉCNICA CONSOLIDADA */
+  /* SUBGRUPOS COMPACTOS DA PÁGINA TÉCNICA */
   .special-subgroup-card {
     border: 1px solid #dcd7ca;
     background: rgba(253, 252, 249, 0.95);
     border-radius: 4px;
     padding: 6px 8px;
-    margin-bottom: 7px;
+    margin-bottom: 8px;
     display: flex;
     gap: 10px;
     align-items: center;
@@ -288,7 +305,7 @@
     background: #faf6ec;
     border-left: 3.5px solid #c59b27;
     color: #73570e;
-    font-size: 7.6pt;
+    font-size: 7.4pt;
     font-weight: bold;
     padding: 2.5px 6px;
     text-transform: uppercase;
@@ -298,8 +315,8 @@
     flex: 1;
   }
   .special-subgroup-photo {
-    width: 140px;
-    height: 98px;
+    width: 135px;
+    height: 92px;
     border: 1px solid #ced4da;
     background: #f8f9fa;
     border-radius: 3px;
@@ -939,6 +956,7 @@
     var normalList = Array.from(normalCheckboxes).map(function(c) { return c.value; });
     var specialList = Array.from(specialCheckboxes).map(function(c) { return c.value; });
     
+    // Cômodos normais primeiro, itens especiais no final
     selectedRooms = normalList.concat(specialList);
     
     if (selectedRooms.length === 0) {
@@ -993,6 +1011,12 @@
     renderCurrentRoom();
   }
 
+  function removePhoto(photoIndex) {
+    var room = selectedRooms[currentRoomIndex];
+    roomsData[room].photos.splice(photoIndex, 1);
+    updatePhotosUI();
+  }
+
   function updatePhotosUI() {
     var room = selectedRooms[currentRoomIndex];
     var data = roomsData[room];
@@ -1013,7 +1037,11 @@
       photos.forEach(function(src, idx) {
         var card = document.createElement('div');
         card.className = 'photo-card';
-        card.innerHTML = '<img src="' + src + '"><span style="position:absolute;bottom:2px;right:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;">#' + (idx+1) + '</span>';
+        card.innerHTML = `
+          <img src="${src}">
+          <span style="position:absolute;bottom:2px;right:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;">#${idx+1}</span>
+          <button type="button" class="photo-delete-btn" onclick="removePhoto(${idx})" title="Excluir foto">🗑️</button>
+        `;
         gallery.appendChild(card);
       });
 
@@ -1204,15 +1232,15 @@
     wrapper.style.display = 'block';
     wrapper.innerHTML = '';
 
-    // Separa cômodos normais e itens técnicos
+    // Separação rígida de cômodos normais vs itens técnicos especiais
     var normalRooms = selectedRooms.filter(function(r) { return !isSpecialItem(r); });
     var specialRooms = selectedRooms.filter(function(r) { return isSpecialItem(r); });
 
-    // Total de páginas = cômodos normais + (1 se houver itens especiais) + 1 página final
+    // Cálculo exato: total de cômodos + 1 página agrupada de itens técnicos + 1 página de encerramento
     var totalPages = normalRooms.length + (specialRooms.length > 0 ? 1 : 0) + 1;
     var pageNum = 1;
 
-    // 1. PÁGINAS DOS CÔMODOS NORMAIS (1 página por ambiente)
+    // 1. PÁGINAS DOS CÔMODOS NORMAIS (1 página por cômodo)
     normalRooms.forEach(function(roomName, idx) {
       var data = roomsData[roomName];
       var ai = data.aiAnalysis;
@@ -1335,7 +1363,7 @@
       pageNum++;
     });
 
-    // 2. PÁGINA ÚNICA CONSOLIDADA DE ITENS TÉCNICOS ESPECIAIS (SE HOUVER)
+    // 2. PÁGINA ÚNICA CONSOLIDADA COM TODOS OS ITENS TÉCNICOS ESPECIAIS JUNTOS
     if (specialRooms.length > 0) {
       var specialPage = document.createElement('div');
       specialPage.className = 'laudo-page';
@@ -1357,14 +1385,13 @@
             '</tr>' +
           '</table>' +
 
-          '<div class="room-banner" style="margin-bottom:6px;">4. REGISTRO TÉCNICO: RELÓGIO DE LUZ, GÁS E CHAVES</div>';
+          '<div class="room-banner" style="margin-bottom:8px;">4. REGISTRO TÉCNICO CONSOLIDADO: RELÓGIO DE LUZ, GÁS E CHAVES</div>';
 
       specialRooms.forEach(function(sName) {
         var sData = roomsData[sName];
         var sAi = sData.aiAnalysis;
         var sPrefix = getRoomPrefix(sName);
         var elMain = (sAi.elementos && sAi.elementos[0]) ? sAi.elementos[0] : { elemento: sName, descricao: 'Item vistoriado.', funcionamento: 'Em ordem', classificacao: 'BOM' };
-
         var photoSrc = (sData.photos && sData.photos[0]) ? sData.photos[0] : null;
 
         specialHtml += 
@@ -1393,11 +1420,11 @@
           specialHtml += 
             '<div class="special-subgroup-photo">' +
               '<img src="' + photoSrc + '">' +
-              '<span style="position:absolute;bottom:2px;right:3px;background:rgba(0,0,0,0.7);color:#dfba48;font-size:6.2pt;padding:1px 3px;border-radius:2px;font-weight:bold;">' + sPrefix + '</span>' +
+              '<span style="position:absolute;bottom:2px;right:3px;background:rgba(0,0,0,0.75);color:#dfba48;font-size:6pt;padding:1px 3px;border-radius:2px;font-weight:bold;">' + sPrefix + '</span>' +
             '</div>';
         } else {
           specialHtml += 
-            '<div class="special-subgroup-photo" style="display:flex;align-items:center;justify-content:center;font-size:6.5pt;color:#888;text-align:center;padding:4px;line-height:1.2;">' +
+            '<div class="special-subgroup-photo" style="display:flex;align-items:center;justify-content:center;font-size:6.2pt;color:#888;text-align:center;padding:4px;line-height:1.2;">' +
               'Sem foto anexada<br>(Não disponível)' +
             '</div>';
         }
