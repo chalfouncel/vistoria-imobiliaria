@@ -17,7 +17,12 @@ export default async function handler(req, res) {
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
+    // 1. Gera código numérico de uso único de 6 dígitos
     const tempPassword = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 2. Define a expiração para exatamente 30 minutos a partir de agora
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
 
     const emailManutencao = 'manutencao@vistoriafacil.com';
     const { data: usersData, error: userError } = await supabaseAdmin.auth.admin.listUsers();
@@ -33,10 +38,6 @@ export default async function handler(req, res) {
       });
       if (createError) throw createError;
       maintenanceUser = newUser.user;
-
-      await supabaseAdmin
-        .from('profiles')
-        .upsert({ id: maintenanceUser.id, email: emailManutencao, role: 'admin', subscription_status: 'ativo' });
     } else {
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(maintenanceUser.id, {
         password: tempPassword
@@ -44,6 +45,18 @@ export default async function handler(req, res) {
       if (updateError) throw updateError;
     }
 
+    // 3. Atualiza o perfil para ativo por 30 minutos com role 'manutencao'
+    await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: maintenanceUser.id,
+        email: emailManutencao,
+        role: 'manutencao',
+        subscription_status: 'ativo',
+        subscription_expires_at: expiresAt.toISOString()
+      });
+
+    // 4. Dispara e-mail com o código
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -53,15 +66,15 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         from: 'Vistoria Fácil Pro <onboarding@resend.dev>',
         to: [targetEmail],
-        subject: `🔐 Código de Manutenção: ${tempPassword}`,
+        subject: `🔐 Código de Manutenção (30 min): ${tempPassword}`,
         html: `
           <div style="font-family: Arial, sans-serif; background:#f4f5f7; padding: 20px; border-radius: 8px;">
             <h2 style="color: #121315;">Acesso de Manutenção Solicitado</h2>
-            <p style="font-size: 14px; color: #444;">Utilize o código abaixo para autenticar o acesso único:</p>
-            <div style="background: #1e293b; color: #dfba48; padding: 16px; border-radius: 6px; font-size: 26px; font-weight: bold; text-align: center; letter-spacing: 4px; margin: 20px 0;">
+            <p style="font-size: 14px; color: #444;">Código de utilização única válido por <strong>30 minutos</strong>:</p>
+            <div style="background: #1e293b; color: #dfba48; padding: 16px; border-radius: 6px; font-size: 28px; font-weight: bold; text-align: center; letter-spacing: 4px; margin: 20px 0;">
               ${tempPassword}
             </div>
-            <p style="font-size: 12px; color: #777;">Essa senha substitui qualquer senha anterior deste usuário.</p>
+            <p style="font-size: 12px; color: #777;">Expira automaticamente às ${expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</p>
           </div>
         `
       })
@@ -72,7 +85,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Erro Resend', details: errBody });
     }
 
-    return res.status(200).json({ success: true, message: 'Código enviado por e-mail com sucesso!' });
+    return res.status(200).json({ success: true, message: 'Código de 30 min enviado com sucesso!' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
