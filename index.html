@@ -431,11 +431,11 @@
 
     const agora = new Date();
     const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
-    const isValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
+    const isAtivoValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
 
-    // 2. Conta Manutenção: válida se o horário atual não ultrapassou os 30 min
+    // 2. Conta Manutenção: válida se estiver dentro da janela de 30 minutos
     if (data && data.role === 'manutencao') {
-      if (isValido) {
+      if (isAtivoValido) {
         subBarrierOverlay.style.display = 'none';
         const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção até ' + horaFormatada;
@@ -446,16 +446,14 @@
       return;
     }
 
-    // 3. Usuários comuns (Acesso avulso de 2 horas por R$ 5,00)
-    if (error || !isValido) {
+    // 3. Usuários comuns: bloqueia se houver erro no banco ou se a assinatura não estiver ativa/válida
+    if (error || !isAtivoValido) {
       subBarrierOverlay.style.display = 'flex';
-      if (userExpiresBadge) userExpiresBadge.innerText = 'Expirado';
+      if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso Bloqueado';
     } else {
       subBarrierOverlay.style.display = 'none';
-      if (userExpiresBadge && expiresAt) {
-        const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        userExpiresBadge.innerText = 'Válido até ' + horaFormatada;
-      }
+      const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      if (userExpiresBadge) userExpiresBadge.innerText = 'Válido até ' + horaFormatada;
     }
   }
 
