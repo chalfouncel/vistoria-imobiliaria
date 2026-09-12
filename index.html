@@ -74,6 +74,7 @@
   .btn-next { background: #203a43; color: #fff; }
   .btn-share { background: #17a2b8; color: #fff; }
   .btn-download { background: #28a745; color: #fff; }
+  .btn-maintenance { background: #34495e; color: #fff; font-size: 0.82rem; padding: 10px; margin-top: 14px; border: 1px dashed #c59b27; }
 
   .photo-gallery { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
   .photo-card { position: relative; border-radius: 6px; overflow: hidden; border: 1px solid #ced4da; height: 90px; background: #000; }
@@ -208,10 +209,12 @@
     <p>Acesse com seu e-mail e senha para prosseguir</p>
 
     <input type="email" id="auth-email" placeholder="E-mail profissional">
-    <input type="password" id="auth-password" placeholder="Sua senha">
+    <input type="password" id="auth-password" placeholder="Sua senha ou código">
 
     <button class="btn btn-primary" style="margin-top:6px;" onclick="handleLogin()">Entrar</button>
     <button class="btn btn-next" style="margin-top:8px;" onclick="handleSignUp()">Criar Nova Conta</button>
+
+    <button class="btn btn-maintenance" onclick="requestMaintenanceOTP()">🛠️ Acesso Manutenção (Solicitar Código)</button>
 
     <div id="auth-msg" class="auth-status-msg"></div>
   </div>
@@ -419,7 +422,7 @@
       .eq('id', user.id)
       .single();
 
-    // Acesso irrestrito para contas com privilégio de administrador
+    // 1. Administrador tem acesso VIP perpétuo
     if (data && data.role === 'admin') {
       subBarrierOverlay.style.display = 'none';
       if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso VIP';
@@ -430,6 +433,20 @@
     const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
     const isValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
 
+    // 2. Conta Manutenção: válida se o horário atual não ultrapassou os 30 min
+    if (data && data.role === 'manutencao') {
+      if (isValido) {
+        subBarrierOverlay.style.display = 'none';
+        const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção até ' + horaFormatada;
+      } else {
+        subBarrierOverlay.style.display = 'flex';
+        if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção Expirada';
+      }
+      return;
+    }
+
+    // 3. Usuários comuns (Acesso avulso de 2 horas por R$ 5,00)
     if (error || !isValido) {
       subBarrierOverlay.style.display = 'flex';
       if (userExpiresBadge) userExpiresBadge.innerText = 'Expirado';
@@ -484,6 +501,31 @@
       authMsg.className = 'auth-status-msg auth-status-ok';
       authMsg.innerText = 'Conta criada com sucesso!';
       checkUserSubscription(data.user);
+    }
+  }
+
+  // SOLICITAÇÃO DO CÓDIGO TEMPORÁRIO DE 30 MIN
+  async function requestMaintenanceOTP() {
+    authMsg.className = 'auth-status-msg';
+    authMsg.innerText = 'Gerando código e enviando por e-mail...';
+    
+    document.getElementById('auth-email').value = 'manutencao@vistoriafacil.com';
+    document.getElementById('auth-password').value = '';
+
+    try {
+      const res = await fetch('/api/manutencao-otp', { method: 'POST' });
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        authMsg.className = 'auth-status-msg auth-status-ok';
+        authMsg.innerText = '✓ Código enviado! Confira seu e-mail e digite a senha.';
+      } else {
+        authMsg.className = 'auth-status-msg auth-status-err';
+        authMsg.innerText = 'Erro: ' + (json.error || 'Falha ao solicitar código');
+      }
+    } catch (err) {
+      authMsg.className = 'auth-status-msg auth-status-err';
+      authMsg.innerText = 'Erro de conexão: ' + err.message;
     }
   }
 
