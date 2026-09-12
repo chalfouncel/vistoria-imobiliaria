@@ -147,7 +147,6 @@
   }
   .laudo-page:last-child { page-break-after: auto; }
 
-  /* MARCA D'ÁGUA CENTRALIZADA NO FUNDO DA FOLHA A4 */
   .laudo-watermark {
     position: absolute;
     top: 50%;
@@ -173,23 +172,49 @@
     display: flex; 
     justify-content: space-between; 
     align-items: center; 
-    gap: 10px;
+    gap: 12px;
   }
-  .laudo-header-left {
+  .laudo-header-brand {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex: 1;
   }
   .laudo-header-logo {
-    max-height: 38px;
+    max-height: 42px;
+    max-width: 50px;
     width: auto;
     object-fit: contain;
     border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   }
-  .laudo-main-title { font-size: 11.5pt; font-weight: bold; color: #121315; text-transform: uppercase; letter-spacing: 0.2px; line-height: 1.15; }
-  .laudo-sub-title { font-size: 7.2pt; color: #555; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
-  .laudo-meta-box { font-size: 7.2pt; text-align: right; color: #333; line-height: 1.25; min-width: 180px; }
+  .laudo-main-title { 
+    font-size: 11pt; 
+    font-weight: bold; 
+    color: #121315; 
+    text-transform: uppercase; 
+    letter-spacing: 0.2px; 
+    line-height: 1.15; 
+  }
+  .laudo-sub-title { 
+    font-size: 6.8pt; 
+    color: #555; 
+    text-transform: uppercase; 
+    font-weight: bold; 
+    margin-top: 2px; 
+    line-height: 1.2;
+  }
+  .laudo-meta-box { 
+    font-size: 6.6pt; 
+    text-align: right; 
+    color: #222; 
+    line-height: 1.35; 
+    flex-shrink: 0;
+    max-width: 215px;
+    word-break: break-all;
+  }
+  .laudo-meta-box strong {
+    color: #121315;
+  }
 
   .table-cadastral { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.6pt; background: rgba(255,255,255,0.9); }
   .table-cadastral td { border: 1px solid #c0c0c0; padding: 3.5px 5px; }
@@ -230,7 +255,6 @@
   .vistoria-tipo-card strong { display:block; font-size:.92rem; }
   .vistoria-tipo-card span { display:block; font-size:.72rem; color:#6c757d; margin-top:3px; }
   .vistoria-tipo-card:has(input:checked) { border-color:#c59b27; background:#fff8df; box-shadow:0 0 0 1px #c59b27 inset; }
-  .laudo-meta-box .clicksign-inline { white-space:nowrap; display:block; font-size:6.8pt; }
 </style>
 </head>
 <body>
@@ -461,7 +485,6 @@
       .eq('id', user.id)
       .single();
 
-    // 1. Administrador tem acesso VIP perpétuo
     if (data && data.role === 'admin') {
       subBarrierOverlay.style.display = 'none';
       if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso VIP';
@@ -472,7 +495,6 @@
     const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
     const isAtivoValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
 
-    // 2. Conta Manutenção: válida se estiver dentro da janela de 30 minutos
     if (data && data.role === 'manutencao') {
       if (isAtivoValido) {
         subBarrierOverlay.style.display = 'none';
@@ -485,7 +507,6 @@
       return;
     }
 
-    // 3. Usuários comuns: bloqueia se houver erro no banco ou se a assinatura não estiver ativa/válida
     if (error || !isAtivoValido) {
       subBarrierOverlay.style.display = 'flex';
       if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso Bloqueado';
@@ -541,7 +562,6 @@
     }
   }
 
-  // SOLICITAÇÃO DO CÓDIGO TEMPORÁRIO DE 30 MIN
   async function requestMaintenanceOTP() {
     authMsg.className = 'auth-status-msg';
     authMsg.innerText = 'Gerando código e enviando por e-mail...';
@@ -1100,15 +1120,16 @@
         '<img class="laudo-watermark" src="/marca-dagua.png" alt="Marca d água">' +
         '<div class="laudo-content-layer">' +
           '<div class="laudo-header">' +
-            '<div class="laudo-header-left">' +
+            '<div class="laudo-header-brand">' +
               '<img class="laudo-header-logo" src="/logo.png" alt="M&IC">' +
               '<div>' +
                 '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>LAUDO DE VISTORIA DE LOCAÇÃO</div>' +
-                '<div class="laudo-sub-title">' + imovel + ' | Descrição Técnica e Relatório Fotográfico Consolidado</div>' +
+                '<div class="laudo-sub-title">' + imovel + ' | Descrição Técnica e Relatório Consolidado</div>' +
               '</div>' +
             '</div>' +
             '<div class="laudo-meta-box">' +
-              '<span class="clicksign-inline"><strong>Clicksign:</strong> ' + numContrato + ' &nbsp;|&nbsp; <strong>Vistoria:</strong> ' + tipoVistoria.toUpperCase() + ' &nbsp;|&nbsp; <strong>Data:</strong> ' + dVistoria + '</span>' +
+              '<div><strong>Clicksign:</strong> ' + numContrato + '</div>' +
+              '<div><strong>Vistoria:</strong> ' + tipoVistoria.toUpperCase() + ' &nbsp;|&nbsp; <strong>Data:</strong> ' + dVistoria + '</div>' +
             '</div>' +
           '</div>' +
 
@@ -1216,7 +1237,7 @@
       '<img class="laudo-watermark" src="/marca-dagua.png" alt="Marca d água">' +
       '<div class="laudo-content-layer">' +
         '<div class="laudo-header">' +
-          '<div class="laudo-header-left">' +
+          '<div class="laudo-header-brand">' +
             '<img class="laudo-header-logo" src="/logo.png" alt="M&IC">' +
             '<div>' +
               '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>OBSERVAÇÕES E RESSALVAS CONSOLIDADAS</div>' +
@@ -1224,8 +1245,8 @@
             '</div>' +
           '</div>' +
           '<div class="laudo-meta-box">' +
-            '<strong>Doc Clicksign:</strong> ' + numContrato + '<br>' +
-            '<strong>Data Vistoria:</strong> ' + dVistoria +
+            '<div><strong>Clicksign:</strong> ' + numContrato + '</div>' +
+            '<div><strong>Data Vistoria:</strong> ' + dVistoria + '</div>' +
           '</div>' +
         '</div>' +
 
