@@ -6,12 +6,13 @@ export const config = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-  // Suporte a múltiplas chaves (Gemini e Samba2)
+  // Suporte a múltiplas chaves de IA (Gemini, Samba2 e Groq2)
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const samba2ApiKey = process.env.SAMBA2_API_KEY;
+  const groq2ApiKey = process.env.GROQ2_API_KEY;
 
-  if (!geminiApiKey && !samba2ApiKey) {
-    return res.status(500).json({ error: 'Nenhuma chave de API (GEMINI_API_KEY ou SAMBA2_API_KEY) foi configurada na Vercel.' });
+  if (!geminiApiKey && !samba2ApiKey && !groq2ApiKey) {
+    return res.status(500).json({ error: 'Nenhuma chave de API (GEMINI_API_KEY, SAMBA2_API_KEY ou GROQ2_API_KEY) foi configurada na Vercel.' });
   }
 
   const { roomName, photosDataUrls, isMeterReading } = req.body;
@@ -84,17 +85,43 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
 
   let lastError = "";
 
-  // 1. Tenta usar a SAMBA2_API_KEY se estiver configurada
+  // 1. Tenta usar a GROQ2_API_KEY se estiver configurada
+  if (groq2ApiKey) {
+    try {
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groq2ApiKey}`
+        },
+        body: JSON.stringify({
+          model: "llama-3.2-90b-vision-preview", // Modelo multimodal compatível na Groq
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      if (groqRes.ok) {
+        const groqData = await groqRes.json();
+        const contentText = groqData.choices?.[0]?.message?.content;
+        if (contentText) {
+          return res.status(200).json(JSON.parse(contentText));
+        }
+      }
+    } catch (err) {
+      lastError = `Groq2 erro: ${err.message}`;
+    }
+  }
+
+  // 2. Tenta usar a SAMBA2_API_KEY se estiver configurada
   if (samba2ApiKey) {
     try {
-      const sambaRes = await fetch('https://api.sambanova.ai/v1/chat/completions', { // Endpoint padrão ou customizado compatível
+      const sambaRes = await fetch('https://api.sambanova.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${samba2ApiKey}`
         },
         body: JSON.stringify({
-          model: "Meta-Llama-3.1-405B-Instruct", // Exemplo de modelo multimodal Samba2 se aplicável
+          model: "Meta-Llama-3.1-405B-Instruct",
           messages: [{ role: "user", content: prompt }]
         })
       });
@@ -110,7 +137,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     }
   }
 
-  // 2. Fallback / Execução padrão via Gemini API Keys
+  // 3. Fallback final via Gemini API Keys
   if (geminiApiKey) {
     let targetModels = [];
     try {
@@ -158,5 +185,5 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     }
   }
 
-  res.status(500).json({ error: `Nenhum modelo de IA disponível respondeu com sucesso: ${lastError}` });
+  res.status(500).json({ error: `Nenhum provedor ou modelo de IA disponível respondeu com sucesso: ${lastError}` });
 }
