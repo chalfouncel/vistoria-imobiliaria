@@ -6,15 +6,20 @@ export const config = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'Chave GEMINI_API_KEY não configurada na Vercel.' });
+  // Suporte a múltiplas chaves (Gemini e Samba2)
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const samba2ApiKey = process.env.SAMBA2_API_KEY;
 
-  const { roomName, photosDataUrls } = req.body;
+  if (!geminiApiKey && !samba2ApiKey) {
+    return res.status(500).json({ error: 'Nenhuma chave de API (GEMINI_API_KEY ou SAMBA2_API_KEY) foi configurada na Vercel.' });
+  }
+
+  const { roomName, photosDataUrls, isMeterReading } = req.body;
   if (!photosDataUrls || !photosDataUrls.length) {
     return res.status(400).json({ error: 'Nenhuma fotografia enviada.' });
   }
 
-  const prompt = `Você é perito de vistoria imobiliária. Analise TODAS as fotos do ambiente "${roomName}" em conjunto. 
+  let prompt = `Você é perito de vistoria imobiliária. Analise TODAS as fotos do ambiente ou item "${roomName}" em conjunto. 
 Compare as imagens, mas descreva cada foto apenas pelo que está visível nela. 
 Não invente funcionamento, medidas, marcas, materiais, cores exatas ou avarias. 
 Não trate sombra, reflexo ou sujeira como dano sem evidência. 
@@ -22,6 +27,10 @@ Quando funcionamento não puder ser testado, escreva "Não verificável por foto
 A coluna DESCRIÇÃO E ESTADO DE CONSERVAÇÃO deve ser detalhada. 
 Retorne exatamente ${photosDataUrls.length} itens em fotos, na ordem recebida. 
 Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou NÃO CONCLUSIVO.`;
+
+  if (isMeterReading) {
+    prompt += ` ATENÇÃO ESPECIAL: Este item é um medidor técnico ("${roomName}"). Identifique obrigatoriamente nos visores das fotografias o número de série/identificação do aparelho e a leitura numérica atual do consumo, informando-os claramente na descrição e nos elementos técnicos.`;
+  }
 
   const parts = [{ text: prompt }];
   photosDataUrls.forEach((dataUrl, idx) => {
@@ -73,54 +82,81 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     }
   });
 
-  // Lista dinâmica e fallback estático completo
-  let targetModels = [];
-
-  try {
-    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      if (Array.isArray(listData.models)) {
-        targetModels = listData.models
-          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-          .map(m => m.name.replace(/^models\//, ''))
-          .sort((a, b) => (a.includes('flash') ? -1 : 1));
-      }
-    }
-  } catch (_) {}
-
-  if (!targetModels.length) {
-    targetModels = [
-      "gemini-2.0-flash",
-      "gemini-2.0-flash-lite",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b",
-      "gemini-1.5-pro",
-      "gemini-3.6-flash",
-      "gemini-3.8-flash"
-    ];
-  }
-
   let lastError = "";
 
-  for (const model of targetModels) {
+  // 1. Tenta usar a SAMBA2_API_KEY se estiver configurada
+  if (samba2ApiKey) {
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      const sambaRes = await fetch('https://api.sambanova.ai/v1/chat/completions', { // Endpoint padrão ou customizado compatível
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${samba2ApiKey}`
+        },
+        body: JSON.stringify({
+          model: "Meta-Llama-3.1-405B-Instruct", // Exemplo de modelo multimodal Samba2 se aplicável
+          messages: [{ role: "user", content: prompt }]
+        })
       });
-
-      const data = await response.json();
-      if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return res.status(200).json(JSON.parse(data.candidates[0].content.parts[0].text));
+      if (sambaRes.ok) {
+        const sambaData = await sambaRes.json();
+        const contentText = sambaData.choices?.[0]?.message?.content;
+        if (contentText) {
+          return res.status(200).json(JSON.parse(contentText));
+        }
       }
-
-      lastError = data.error?.message || `Falha HTTP ${response.status} no modelo ${model}`;
     } catch (err) {
-      lastError = err.message;
+      lastError = `Samba2 erro: ${err.message}`;
     }
   }
 
-  res.status(500).json({ error: `Nenhum modelo disponível respondeu: ${lastError}` });
+  // 2. Fallback / Execução padrão via Gemini API Keys
+  if (geminiApiKey) {
+    let targetModels = [];
+    try {
+      const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        if (Array.isArray(listData.models)) {
+          targetModels = listData.models
+            .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+            .map(m => m.name.replace(/^models\//, ''))
+            .sort((a, b) => (a.includes('flash') ? -1 : 1));
+        }
+      }
+    } catch (_) {}
+
+    if (!targetModels.length) {
+      targetModels = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-3.6-flash",
+        "gemini-3.8-flash"
+      ];
+    }
+
+    for (const model of targetModels) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+
+        const data = await response.json();
+        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return res.status(200).json(JSON.parse(data.candidates[0].content.parts[0].text));
+        }
+
+        lastError = data.error?.message || `Falha HTTP ${response.status} no modelo ${model}`;
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+  }
+
+  res.status(500).json({ error: `Nenhum modelo de IA disponível respondeu com sucesso: ${lastError}` });
 }
