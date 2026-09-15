@@ -8,6 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Biblioteca para Geração de QR Code -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 
 <style>
   :root {
@@ -65,10 +67,10 @@
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
   label { display: block; font-size: 0.84rem; font-weight: 700; color: #343a40; margin-bottom: 4px; margin-top: 12px; }
-  input[type="text"], input[type="date"], input[type="password"], input[type="email"], textarea, select {
+  input[type="text"], input[type="url"], input[type="date"], input[type="password"], input[type="email"], textarea, select {
     width: 100%; padding: 12px; border: 1.5px solid #ced4da; border-radius: 8px; font-size: 0.95rem; background: #fff; color: #212529; font-weight: 500;
   }
-  input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus { border-color: #007bff; outline: none; }
+  input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus, input[type="url"]:focus { border-color: #007bff; outline: none; }
   .field-ok { background-color: #e8f5e9 !important; border-color: #28a745 !important; }
   input[type="file"] { display: none; }
 
@@ -522,6 +524,13 @@
       <div class="photo-gallery" id="roomPhotoGallery"></div>
 
       <button id="btnNextRoom" class="btn btn-next" style="display:none;" onclick="handleNextRoom()">Passar para o próximo Item/Cômodo ➔</button>
+      
+      <!-- Entrada para link das fotos em alta definição -->
+      <div id="containerLinkHD" style="display:none; margin-top: 16px; margin-bottom: 8px;">
+        <label>Link para acesso às fotos em alta definição:</label>
+        <input type="url" id="linkFotosHD" placeholder="Cole o link aqui (Drive, OneDrive, etc)">
+      </div>
+
       <button id="btnFinish" class="btn btn-primary" style="display:none;" onclick="startGeminiAuditAndPdf()">Gerar Laudo Pericial com IA Gemini ★</button>
 
       <div id="aiLoader" class="loader-box">
@@ -956,7 +965,6 @@
     var normalList = Array.from(normalCheckboxes).map(function(c) { return c.value; });
     var specialList = Array.from(specialCheckboxes).map(function(c) { return c.value; });
     
-    // Cômodos normais primeiro, itens especiais no final
     selectedRooms = normalList.concat(specialList);
     
     if (selectedRooms.length === 0) {
@@ -1024,6 +1032,7 @@
     var gallery = document.getElementById('roomPhotoGallery');
     var countNotice = document.getElementById('photoCountNotice');
     var captureArea = document.getElementById('btnCaptureArea');
+    var containerLinkHD = document.getElementById('containerLinkHD');
     var minPhotos = getMinPhotosForRoom(room);
 
     gallery.innerHTML = '';
@@ -1059,13 +1068,16 @@
       if (isLastRoom) {
         btnNext.style.display = 'none';
         btnFinish.style.display = 'flex';
+        containerLinkHD.style.display = 'block';
       } else {
         btnNext.style.display = 'flex';
         btnFinish.style.display = 'none';
+        containerLinkHD.style.display = 'none';
       }
     } else {
       btnNext.style.display = 'none';
       btnFinish.style.display = 'none';
+      containerLinkHD.style.display = 'none';
     }
   }
 
@@ -1079,14 +1091,14 @@
       var img = new Image();
       img.onload = function() {
         var canvas = document.createElement('canvas');
-        var MAX_WIDTH = 1200;
+        var MAX_WIDTH = 800; // Reduzido para evitar Timeout na Vercel
         var scaleSize = MAX_WIDTH / img.width;
         canvas.width = (img.width > MAX_WIDTH) ? MAX_WIDTH : img.width;
         canvas.height = (img.width > MAX_WIDTH) ? img.height * scaleSize : img.height;
 
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.65);
 
         var room = selectedRooms[currentRoomIndex];
         roomsData[room].unavailable = false;
@@ -1227,20 +1239,19 @@
     var dTermino = document.getElementById('dataTermino').value ? document.getElementById('dataTermino').value.split('-').reverse().join('/') : '';
     var dVistoria = document.getElementById('dataVistoria').value ? document.getElementById('dataVistoria').value.split('-').reverse().join('/') : '';
     var tipoVistoria = (document.querySelector('input[name="tipoVistoria"]:checked') || {}).value || 'Entrada';
+    var linkHD = document.getElementById('linkFotosHD').value.trim();
 
     var wrapper = document.getElementById('pdfTemplateWrapper');
     wrapper.style.display = 'block';
     wrapper.innerHTML = '';
 
-    // Separação rígida de cômodos normais vs itens técnicos especiais
     var normalRooms = selectedRooms.filter(function(r) { return !isSpecialItem(r); });
     var specialRooms = selectedRooms.filter(function(r) { return isSpecialItem(r); });
 
-    // Cálculo exato: total de cômodos + 1 página agrupada de itens técnicos + 1 página de encerramento
     var totalPages = normalRooms.length + (specialRooms.length > 0 ? 1 : 0) + 1;
     var pageNum = 1;
 
-    // 1. PÁGINAS DOS CÔMODOS NORMAIS (1 página por cômodo)
+    // 1. PÁGINAS DOS CÔMODOS NORMAIS
     normalRooms.forEach(function(roomName, idx) {
       var data = roomsData[roomName];
       var ai = data.aiAnalysis;
@@ -1450,9 +1461,26 @@
       pageNum++;
     }
 
-    // 3. PÁGINA FINAL DE OBSERVAÇÕES, CONTESTAÇÃO E ENCERRAMENTO
+    // 3. PÁGINA FINAL DE OBSERVAÇÕES E ENCERRAMENTO
     var finalPage = document.createElement('div');
     finalPage.className = 'laudo-page';
+
+    // Gerador de QRCode caso haja o link HD
+    var qrCodeHtml = '';
+    if (linkHD) {
+      var qr = new QRious({ value: linkHD, size: 300, level: 'M' });
+      var qrDataUrl = qr.toDataURL('image/jpeg');
+      
+      qrCodeHtml = 
+        '<div class="room-banner" style="margin-top:16px;">7. ACERVO FOTOGRÁFICO EM ALTA DEFINIÇÃO</div>' +
+        '<div style="font-size:7.5pt; margin-top:8px; line-height:1.45; border: 1px solid #e1e4e8; padding: 10px 12px; background: #fdfdfd; border-radius:4px; display: flex; gap: 14px; align-items: center;">' +
+          '<div style="flex: 1;">' +
+            '<strong style="color:#222; display:block; margin-bottom:4px;">Segue abaixo o link para baixar as fotos em alta definição. As fotos devem ser baixadas e armazenadas pelas partes num prazo de 30 dias.</strong>' +
+            '<span style="color:#007bff; word-break: break-all;">' + escapeHtml(linkHD) + '</span>' +
+          '</div>' +
+          '<img src="' + qrDataUrl + '" style="width:20mm; height:20mm; object-fit:contain; flex-shrink:0; border:1px solid #ccc; padding:2px; background:#fff;">' +
+        '</div>';
+    }
 
     var finalHtml = 
       '<img class="laudo-watermark" src="/marca-dagua.png" alt="Marca d água">' +
@@ -1505,6 +1533,8 @@
             'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>[cite: 1], inspecionado pelo vistoriador <strong>' + currentVistoriadorEmail + '</strong>, dispensando assinaturas físicas manuscritas adicionais[cite: 1].' +
           '</p>' +
         '</div>' +
+
+        qrCodeHtml + // Insere bloco do QR Code HD se existir
 
         '<div class="laudo-copyright-notice">' +
           '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.[cite: 1]<br>' +
