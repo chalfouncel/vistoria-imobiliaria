@@ -7,6 +7,21 @@ export default async function handler(req, res) {
     const { event, payment } = req.body || {};
 
     if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
+      
+      // ==========================================
+      // TRAVA 1: IGNORAR ALUGUÉIS E OUTROS VALORES
+      // ==========================================
+      const description = (payment?.description || '').toLowerCase();
+      const value = payment?.value;
+
+      // Se a descrição contém "aluguel" ou o valor não for a taxa de R$ 5.00, retorna 200 OK
+      if (description.includes('aluguel') || value !== 5.0) {
+        return res.status(200).json({ 
+          received: true, 
+          ignoredReason: 'Pagamento ignorado: Referente a aluguel ou valor não corresponde à taxa do app (R$ 5,00).' 
+        });
+      }
+
       let customerEmail = payment?.customerEmail || payment?.email;
 
       // Se o email não estiver no payload, consulta os dados do cliente no Asaas
@@ -32,8 +47,15 @@ export default async function handler(req, res) {
         }
       }
 
+      // ==========================================
+      // TRAVA 2: SEM EMAIL RETORNA 200 (NÃO 400)
+      // ==========================================
       if (!customerEmail) {
-        return res.status(400).json({ error: 'Email não encontrado para o cliente', customer: payment?.customer });
+        return res.status(200).json({ 
+          received: true, 
+          ignoredReason: 'Email não encontrado para o cliente', 
+          customer: payment?.customer 
+        });
       }
 
       // Define a expiração para exatamente 2 horas a partir de agora
@@ -64,6 +86,17 @@ export default async function handler(req, res) {
       }
 
       const updatedData = await patchRes.json();
+      
+      // ==========================================
+      // TRAVA 3: EMAIL NÃO CADASTRADO NO APP
+      // ==========================================
+      if (!updatedData || updatedData.length === 0) {
+        return res.status(200).json({ 
+          received: true, 
+          ignoredReason: `Pagamento recebido, mas o email ${customerEmail} não está cadastrado no aplicativo Vistoria Fácil Pro.` 
+        });
+      }
+
       return res.status(200).json({ success: true, activated: customerEmail, updatedRows: updatedData.length });
     }
 
