@@ -1,12 +1,11 @@
 export const config = {
-  maxDuration: 60,
+  maxDuration: 120,
   api: { bodyParser: { sizeLimit: '15mb' } }
 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-  // Suporte a múltiplas chaves de IA (Gemini, Samba2 e Groq2)
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const samba2ApiKey = process.env.SAMBA2_API_KEY;
   const groq2ApiKey = process.env.GROQ2_API_KEY;
@@ -83,38 +82,35 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     }
   });
 
-  let lastError = "";
+  const provedores = [];
 
-  // 1. Tenta usar a GROQ2_API_KEY se estiver configurada
+  // 1. Groq (disparado em paralelo)
   if (groq2ApiKey) {
-    try {
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    provedores.push(
+      fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${groq2ApiKey}`
         },
         body: JSON.stringify({
-          model: "llama-3.2-90b-vision-preview", // Modelo multimodal compatível na Groq
+          model: "llama-3.2-90b-vision-preview",
           messages: [{ role: "user", content: prompt }]
         })
-      });
-      if (groqRes.ok) {
+      }).then(async (groqRes) => {
+        if (!groqRes.ok) throw new Error(`Groq HTTP ${groqRes.status}`);
         const groqData = await groqRes.json();
         const contentText = groqData.choices?.[0]?.message?.content;
-        if (contentText) {
-          return res.status(200).json(JSON.parse(contentText));
-        }
-      }
-    } catch (err) {
-      lastError = `Groq2 erro: ${err.message}`;
-    }
+        if (!contentText) throw new Error('Groq respondeu sem conteúdo.');
+        return JSON.parse(contentText);
+      })
+    );
   }
 
-  // 2. Tenta usar a SAMBA2_API_KEY se estiver configurada
+  // 2. SambaNova (disparado em paralelo)
   if (samba2ApiKey) {
-    try {
-      const sambaRes = await fetch('https://api.sambanova.ai/v1/chat/completions', {
+    provedores.push(
+      fetch('https://api.sambanova.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,66 +120,78 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
           model: "Meta-Llama-3.1-405B-Instruct",
           messages: [{ role: "user", content: prompt }]
         })
-      });
-      if (sambaRes.ok) {
+      }).then(async (sambaRes) => {
+        if (!sambaRes.ok) throw new Error(`SambaNova HTTP ${sambaRes.status}`);
         const sambaData = await sambaRes.json();
         const contentText = sambaData.choices?.[0]?.message?.content;
-        if (contentText) {
-          return res.status(200).json(JSON.parse(contentText));
-        }
+        if (!contentText) throw new Error('SambaNova respondeu sem conteúdo.');
+        return JSON.parse(contentText);
+      })
+    );
+  }
+
+  // 3. Gemini (disparado em paralelo, com fallback interno de modelos)
+  if (geminiApiKey) {
+    provedores.push(chamarGemini(geminiApiKey, payload, schema));
+  }
+
+  if (provedores.length === 0) {
+    return res.status(500).json({ error: 'Nenhum provedor de IA pôde ser acionado.' });
+  }
+
+  try {
+    // Pega a PRIMEIRA IA que responder com sucesso
+    const resultado = await Promise.any(provedores);
+    return res.status(200).json(resultado);
+  } catch (error) {
+    const erros = error.errors?.map(e => e.message) || [error.message];
+    return res.status(500).json({ error: 'Nenhum provedor ou modelo de IA disponível respondeu com sucesso.', details: erros });
+  }
+}
+
+async function chamarGemini(geminiApiKey, payload, schema) {
+  let targetModels = [];
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      if (Array.isArray(listData.models)) {
+        targetModels = listData.models
+          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''))
+          .sort((a, b) => (a.includes('flash') ? -1 : 1));
+      }
+    }
+  } catch (_) {}
+
+  if (!targetModels.length) {
+    targetModels = [
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
+      "gemini-1.5-pro",
+      "gemini-3.6-flash",
+      "gemini-3.8-flash"
+    ];
+  }
+
+  for (const model of targetModels) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+
+      const data = await response.json();
+      if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return JSON.parse(data.candidates[0].content.parts[0].text);
       }
     } catch (err) {
-      lastError = `Samba2 erro: ${err.message}`;
+      continue;
     }
   }
 
-  // 3. Fallback final via Gemini API Keys
-  if (geminiApiKey) {
-    let targetModels = [];
-    try {
-      const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        if (Array.isArray(listData.models)) {
-          targetModels = listData.models
-            .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-            .map(m => m.name.replace(/^models\//, ''))
-            .sort((a, b) => (a.includes('flash') ? -1 : 1));
-        }
-      }
-    } catch (_) {}
-
-    if (!targetModels.length) {
-      targetModels = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-pro",
-        "gemini-3.6-flash",
-        "gemini-3.8-flash"
-      ];
-    }
-
-    for (const model of targetModels) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload
-        });
-
-        const data = await response.json();
-        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          return res.status(200).json(JSON.parse(data.candidates[0].content.parts[0].text));
-        }
-
-        lastError = data.error?.message || `Falha HTTP ${response.status} no modelo ${model}`;
-      } catch (err) {
-        lastError = err.message;
-      }
-    }
-  }
-
-  res.status(500).json({ error: `Nenhum provedor ou modelo de IA disponível respondeu com sucesso: ${lastError}` });
+  throw new Error('Todos os modelos Gemini falharam.');
 }
