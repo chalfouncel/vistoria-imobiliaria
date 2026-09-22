@@ -1159,6 +1159,9 @@
     };
   }
 
+  // ============================================================================
+  // FUNÇÃO ATUALIZADA: processa até 3 cômodos em PARALELO para acelerar o laudo
+  // ============================================================================
   async function startGeminiAuditAndPdf() {
     var btnFinish = document.getElementById('btnFinish');
     var aiLoader = document.getElementById('aiLoader');
@@ -1186,24 +1189,38 @@
     aiLoader.style.display = 'block';
 
     try {
-      for (var i = 0; i < selectedRooms.length; i++) {
-        var room = selectedRooms[i];
-        var rData = roomsData[room];
+      // Limite de concorrência: até 3 chamadas paralelas ao /api/audit
+      const CONCORRENCIA = 3;
+      let indiceAtual = 0;
 
-        if (rData.unavailable) {
-          rData.aiAnalysis = {
-            introducao: 'O item ' + room + ' foi formalmente declarado como INEXISTENTE ou NÃO DISPONÍVEL para conferência no momento da vistoria.',
-            elementos: [{ elemento: room, descricao: 'Não disponível / Inexistente no imóvel inspecionado.', funcionamento: 'Não aplicável', classificacao: 'NÃO POSSUI' }],
-            fotos: [],
-            ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
-          };
-          continue;
+      async function worker() {
+        while (indiceAtual < selectedRooms.length) {
+          const i = indiceAtual++;
+          const room = selectedRooms[i];
+          const rData = roomsData[room];
+
+          if (rData.unavailable) {
+            rData.aiAnalysis = {
+              introducao: 'O item ' + room + ' foi formalmente declarado como INEXISTENTE ou NÃO DISPONÍVEL para conferência no momento da vistoria.',
+              elementos: [{ elemento: room, descricao: 'Não disponível / Inexistente no imóvel inspecionado.', funcionamento: 'Não aplicável', classificacao: 'NÃO POSSUI' }],
+              fotos: [],
+              ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
+            };
+            continue;
+          }
+
+          if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
+          rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos);
         }
-
-        var photos = rData.photos;
-        if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
-        rData.aiAnalysis = await callGeminiPericialIndividual(room, photos);
       }
+
+      // Lança até CONCORRENCIA workers em paralelo
+      const workers = [];
+      const totalWorkers = Math.min(CONCORRENCIA, selectedRooms.length);
+      for (let w = 0; w < totalWorkers; w++) {
+        workers.push(worker());
+      }
+      await Promise.all(workers);
 
       if (aiText) aiText.innerText = 'Análises concluídas. Gerando o PDF pericial...';
       await renderAndGeneratePdf();
