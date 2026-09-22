@@ -815,14 +815,16 @@
         }
       }
 
-      // MÉTODO 1 (regex) - motor original - CONTINUA FUNCIONANDO
+      // MÉTODO 1 (regex) - motor original V16 - CONTINUA FUNCIONANDO
       runContractExtractionV16(allRawLines, page1RawLines);
 
-      // MÉTODO 2 (bloco oculto [MIC_DADOS]) - NOVO - sobrescreve se encontrar
+      // MÉTODO 2 (bloco [MIC_DADOS]) - motor paralelo, linha a linha
+      console.log('📄 total de linhas extraídas do PDF:', allRawLines.length);
+      console.log('📄 primeiras linhas do PDF:', allRawLines.slice(0, 8));
       var usouMicDados = runMicDadosExtraction(allRawLines);
 
       if (usouMicDados) {
-        statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido via bloco MIC_DADOS (dados oficiais carregados).</span>';
+        statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido — dados oficiais do bloco MIC_DADOS carregados.</span>';
       } else {
         statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e dados cadastrais carregados.</span>';
       }
@@ -893,100 +895,107 @@
   }
 
   // ============================================================================
-  // SEGUNDO MÉTODO DE CAPTURA: bloco oculto [MIC_DADOS] ... [/MIC_DADOS]
-  // VERSÃO TOLERANTE A ESPAÇOS E VARIAÇÕES NA DIGITAÇÃO
-  // Aceita: {Proprietario:}, { Proprietario : }, {Proprietario:} etc.
+  // MOTOR PARALELO: Captura via bloco [MIC_DADOS] (linha a linha, igual V16)
+  // NÃO substitui o motor original — é um método complementar redundante.
   // ============================================================================
   function runMicDadosExtraction(allLines) {
-    var fullText = allLines.join(" ");
+    var encontrouBloco = false;
+    var dentroDoBloco = false;
+    var camposEncontrados = {};
 
-    var micMatch = fullText.match(/\[MIC_DADOS\]([\s\S]*?)\[\/MIC_DADOS\]/i);
-    if (!micMatch) return false;
+    // Itera todas as linhas do texto extraído (mesma lógica do V16)
+    for (var i = 0; i < allLines.length; i++) {
+      var linha = allLines[i].trim();
 
-    var bloco = micMatch[1];
+      // Detecta início do bloco
+      if (linha.indexOf('[MIC_DADOS]') !== -1 || linha.indexOf('[mic_dados]') !== -1) {
+        dentroDoBloco = true;
+        encontrouBloco = true;
+        console.log('🟢 Bloco [MIC_DADOS] detectado na linha', i);
+        continue;
+      }
 
-    // Remove espaços internos da chave para tolerar erros de digitação.
-    // Ex: {Proprietario:} ou {Proprietario :} viram chave = "proprietario"
-    function extrairValor(chave) {
-      var chaveLimp = chave.replace(/\s+/g, '').toLowerCase();
+      // Detecta fim do bloco
+      if (linha.indexOf('[/MIC_DADOS]') !== -1 || linha.indexOf('[/mic_dados]') !== -1) {
+        dentroDoBloco = false;
+        console.log('🔴 Fim do bloco [/MIC_DADOS] na linha', i);
+        continue;
+      }
 
-      // Divide o bloco em linhas e procura por linha que contenha {chave}
-      var linhas = bloco.split(/\r?\n/);
-      for (var i = 0; i < linhas.length; i++) {
-        var linha = linhas[i];
-        var m = linha.match(/\{([^}]+):\}\s*([\s\S]*)$/);
-        if (!m) continue;
-
-        var chaveLinhaLimp = m[1].replace(/\s+/g, '').toLowerCase();
-        if (chaveLinhaLimp === chaveLimp) {
-          // Encontrou a linha correta
-          var valor = m[2].trim();
-          // Remove qualquer coisa após que pareça outra linha/parâmetro
-          // (ex.: se o valor vier seguido de outra chave)
-          return valor;
+      // Se está dentro do bloco, captura cada campo
+      if (dentroDoBloco) {
+        // Padrão: {Chave:} Valor
+        var match = linha.match(/^\{([^}]+):\}\s*(.+)$/);
+        if (match) {
+          var chave = match[1].trim();
+          var valor = match[2].trim();
+          camposEncontrados[chave] = valor;
+          console.log('📌 Campo capturado:', chave, '=', valor);
         }
       }
-      return '';
     }
 
-    var proprietario = extrairValor('Proprietario');
-    var inquilino = extrairValor('Inquilino');
-    var endereco = extrairValor('Endereco');
-    var dataInicio = extrairValor('DataInicio');
-    var dataFim = extrairValor('DataFim');
-    var link = extrairValor('link');
+    if (!encontrouBloco) {
+      console.log('⚠️ Bloco [MIC_DADOS] não encontrado no PDF');
+      return false;
+    }
 
-    var encontrou = false;
+    // Aplica os valores nos campos
+    var aplicouAlgo = false;
 
-    if (proprietario) {
-      document.getElementById('locador').value = proprietario;
+    if (camposEncontrados['Proprietario']) {
+      document.getElementById('locador').value = camposEncontrados['Proprietario'];
       highlightField('locador');
-      encontrou = true;
+      aplicouAlgo = true;
     }
-    if (inquilino) {
-      document.getElementById('locatario').value = inquilino;
+
+    if (camposEncontrados['Inquilino']) {
+      document.getElementById('locatario').value = camposEncontrados['Inquilino'];
       highlightField('locatario');
-      encontrou = true;
+      aplicouAlgo = true;
     }
-    if (endereco) {
-      document.getElementById('imovel').value = decodeAddressOnly(endereco);
+
+    if (camposEncontrados['Endereco']) {
+      document.getElementById('imovel').value = decodeAddressOnly(camposEncontrados['Endereco']);
       highlightField('imovel');
-      encontrou = true;
+      aplicouAlgo = true;
     }
-    if (dataInicio) {
-      var isoIni = toIsoDate(dataInicio);
+
+    if (camposEncontrados['DataInicio']) {
+      var isoIni = toIsoDate(camposEncontrados['DataInicio']);
       if (isoIni) {
         document.getElementById('dataInicio').value = isoIni;
         highlightField('dataInicio');
-        encontrou = true;
+        aplicouAlgo = true;
       }
     }
-    if (dataFim) {
-      var isoFim = toIsoDate(dataFim);
+
+    if (camposEncontrados['DataFim']) {
+      var isoFim = toIsoDate(camposEncontrados['DataFim']);
       if (isoFim) {
         document.getElementById('dataTermino').value = isoFim;
         highlightField('dataTermino');
-        encontrou = true;
+        aplicouAlgo = true;
       }
     }
-    if (link) {
-      document.getElementById('linkFotosHD').value = link;
-      encontrou = true;
+
+    if (camposEncontrados['link']) {
+      document.getElementById('linkFotosHD').value = camposEncontrados['link'];
+      aplicouAlgo = true;
     }
 
-    return encontrou;
+    return aplicouAlgo;
   }
 
-  // Converte data (dd/mm/aaaa) para o formato ISO do <input type="date">
+  // Converte dd/mm/aaaa ou dd-mm-aaaa para yyyy-mm-dd (formato do campo date)
   function toIsoDate(d) {
-    d = (d || '').trim();
-    var m = d.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    var m = (d || '').trim().match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
     if (m) {
       var ano = m[3].length === 2 ? '20' + m[3] : m[3];
-      var pad = function(n) { return (n.length < 2 ? '0' : '') + n; };
+      function pad(n) { return (n.length < 2 ? '0' : '') + n; }
       return ano + '-' + pad(m[2]) + '-' + pad(m[1]);
     }
-    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
     return '';
   }
 
@@ -1203,8 +1212,6 @@
       img.onload = function() {
         var canvas = document.createElement('canvas');
 
-        // Se a foto for menor que 1600px no maior lado, MANTÉM resolução original.
-        // Se for maior, reduz proporcionalmente para 1600px no maior lado.
         var MAX_LADO = 1600;
         var escala = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
 
@@ -1214,7 +1221,6 @@
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Qualidade 0.75 reduz peso sem perda visual significativa
         var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
 
         var room = selectedRooms[currentRoomIndex];
@@ -1651,7 +1657,7 @@
           '</p>' +
         '</div>' +
 
-        qrCodeHtml + // Insere bloco do QR Code HD se existir
+        qrCodeHtml +
 
         '<div class="laudo-copyright-notice">' +
           '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.<br>' +
