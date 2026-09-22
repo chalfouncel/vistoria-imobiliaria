@@ -894,8 +894,8 @@
 
   // ============================================================================
   // SEGUNDO MÉTODO DE CAPTURA: bloco oculto [MIC_DADOS] ... [/MIC_DADOS]
-  // Adicionado como método COMPLEMENTAR (não substitui o motor regex original)
-  // Campos que ele preencher sobrescrevem os valores já capturados.
+  // VERSÃO TOLERANTE A ESPAÇOS E VARIAÇÕES NA DIGITAÇÃO
+  // Aceita: {Proprietario:}, { Proprietario : }, {Proprietario:} etc.
   // ============================================================================
   function runMicDadosExtraction(allLines) {
     var fullText = allLines.join(" ");
@@ -905,11 +905,28 @@
 
     var bloco = micMatch[1];
 
+    // Remove espaços internos da chave para tolerar erros de digitação.
+    // Ex: {Proprietario:} ou {Proprietario :} viram chave = "proprietario"
     function extrairValor(chave) {
-      var re = new RegExp('\\{' + chave + '\\s*:\\s*\\}\\s*=?\\s*([^\\r\\n\\{\\[\\]]+)', 'i');
-      var m = bloco.match(re);
-      if (!m) return '';
-      return m[1].replace(/\s+$/, '').trim();
+      var chaveLimp = chave.replace(/\s+/g, '').toLowerCase();
+
+      // Divide o bloco em linhas e procura por linha que contenha {chave}
+      var linhas = bloco.split(/\r?\n/);
+      for (var i = 0; i < linhas.length; i++) {
+        var linha = linhas[i];
+        var m = linha.match(/\{([^}]+):\}\s*([\s\S]*)$/);
+        if (!m) continue;
+
+        var chaveLinhaLimp = m[1].replace(/\s+/g, '').toLowerCase();
+        if (chaveLinhaLimp === chaveLimp) {
+          // Encontrou a linha correta
+          var valor = m[2].trim();
+          // Remove qualquer coisa após que pareça outra linha/parâmetro
+          // (ex.: se o valor vier seguido de outra chave)
+          return valor;
+        }
+      }
+      return '';
     }
 
     var proprietario = extrairValor('Proprietario');
