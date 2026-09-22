@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Vistoria Fácil Pro — M&IC</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -887,7 +888,7 @@
       var candidate = lines[j].trim();
       if (isValidPersonName(candidate)) return cleanName(candidate);
     }
-    return "";
+ return "";
   }
 
   function extractAddressAfterSituado(text) {
@@ -1081,6 +1082,9 @@
     }
   }
 
+  // ==========================================================================
+  // COMPRESSÃO DE IMAGEM MELHORADA (preserva resolução até 1600px)
+  // ==========================================================================
   var cameraInput = document.getElementById('cameraInput');
   cameraInput.addEventListener('change', function(e) {
     var file = e.target.files[0];
@@ -1091,14 +1095,20 @@
       var img = new Image();
       img.onload = function() {
         var canvas = document.createElement('canvas');
-        var MAX_WIDTH = 800; // Reduzido para evitar Timeout na Vercel
-        var scaleSize = MAX_WIDTH / img.width;
-        canvas.width = (img.width > MAX_WIDTH) ? MAX_WIDTH : img.width;
-        canvas.height = (img.width > MAX_WIDTH) ? img.height * scaleSize : img.height;
+
+        // Se a foto for menor que 1600px no maior lado, MANTÉM resolução original.
+        // Se for maior, reduz proporcionalmente para 1600px no maior lado.
+        var MAX_LADO = 1600;
+        var escala = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
+
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
 
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        var dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+
+        // Qualidade 0.75 reduz peso sem perda visual significativa
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
 
         var room = selectedRooms[currentRoomIndex];
         roomsData[room].unavailable = false;
@@ -1159,9 +1169,6 @@
     };
   }
 
-  // ============================================================================
-  // FUNÇÃO ATUALIZADA: processa até 3 cômodos em PARALELO para acelerar o laudo
-  // ============================================================================
   async function startGeminiAuditAndPdf() {
     var btnFinish = document.getElementById('btnFinish');
     var aiLoader = document.getElementById('aiLoader');
@@ -1189,38 +1196,24 @@
     aiLoader.style.display = 'block';
 
     try {
-      // Limite de concorrência: até 3 chamadas paralelas ao /api/audit
-      const CONCORRENCIA = 3;
-      let indiceAtual = 0;
+      for (var i = 0; i < selectedRooms.length; i++) {
+        var room = selectedRooms[i];
+        var rData = roomsData[room];
 
-      async function worker() {
-        while (indiceAtual < selectedRooms.length) {
-          const i = indiceAtual++;
-          const room = selectedRooms[i];
-          const rData = roomsData[room];
-
-          if (rData.unavailable) {
-            rData.aiAnalysis = {
-              introducao: 'O item ' + room + ' foi formalmente declarado como INEXISTENTE ou NÃO DISPONÍVEL para conferência no momento da vistoria.',
-              elementos: [{ elemento: room, descricao: 'Não disponível / Inexistente no imóvel inspecionado.', funcionamento: 'Não aplicável', classificacao: 'NÃO POSSUI' }],
-              fotos: [],
-              ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
-            };
-            continue;
-          }
-
-          if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
-          rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos);
+        if (rData.unavailable) {
+          rData.aiAnalysis = {
+            introducao: 'O item ' + room + ' foi formalmente declarado como INEXISTENTE ou NÃO DISPONÍVEL para conferência no momento da vistoria.',
+            elementos: [{ elemento: room, descricao: 'Não disponível / Inexistente no imóvel inspecionado.', funcionamento: 'Não aplicável', classificacao: 'NÃO POSSUI' }],
+            fotos: [],
+            ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
+          };
+          continue;
         }
-      }
 
-      // Lança até CONCORRENCIA workers em paralelo
-      const workers = [];
-      const totalWorkers = Math.min(CONCORRENCIA, selectedRooms.length);
-      for (let w = 0; w < totalWorkers; w++) {
-        workers.push(worker());
+        var photos = rData.photos;
+        if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
+        rData.aiAnalysis = await callGeminiPericialIndividual(room, photos);
       }
-      await Promise.all(workers);
 
       if (aiText) aiText.innerText = 'Análises concluídas. Gerando o PDF pericial...';
       await renderAndGeneratePdf();
