@@ -815,8 +815,17 @@
         }
       }
 
+      // MÉTODO 1 (regex) - motor original - CONTINUA FUNCIONANDO
       runContractExtractionV16(allRawLines, page1RawLines);
-      statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e dados cadastrais carregados.</span>';
+
+      // MÉTODO 2 (bloco oculto [MIC_DADOS]) - NOVO - sobrescreve se encontrar
+      var usouMicDados = runMicDadosExtraction(allRawLines);
+
+      if (usouMicDados) {
+        statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido via bloco MIC_DADOS (dados oficiais carregados).</span>';
+      } else {
+        statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e dados cadastrais carregados.</span>';
+      }
 
     } catch (err) {
       console.error(err);
@@ -883,12 +892,93 @@
     }
   }
 
+  // ============================================================================
+  // SEGUNDO MÉTODO DE CAPTURA: bloco oculto [MIC_DADOS] ... [/MIC_DADOS]
+  // Adicionado como método COMPLEMENTAR (não substitui o motor regex original)
+  // Campos que ele preencher sobrescrevem os valores já capturados.
+  // ============================================================================
+  function runMicDadosExtraction(allLines) {
+    var fullText = allLines.join(" ");
+
+    var micMatch = fullText.match(/\[MIC_DADOS\]([\s\S]*?)\[\/MIC_DADOS\]/i);
+    if (!micMatch) return false;
+
+    var bloco = micMatch[1];
+
+    function extrairValor(chave) {
+      var re = new RegExp('\\{' + chave + '\\s*:\\s*\\}\\s*=?\\s*([^\\r\\n\\{\\[\\]]+)', 'i');
+      var m = bloco.match(re);
+      if (!m) return '';
+      return m[1].replace(/\s+$/, '').trim();
+    }
+
+    var proprietario = extrairValor('Proprietario');
+    var inquilino = extrairValor('Inquilino');
+    var endereco = extrairValor('Endereco');
+    var dataInicio = extrairValor('DataInicio');
+    var dataFim = extrairValor('DataFim');
+    var link = extrairValor('link');
+
+    var encontrou = false;
+
+    if (proprietario) {
+      document.getElementById('locador').value = proprietario;
+      highlightField('locador');
+      encontrou = true;
+    }
+    if (inquilino) {
+      document.getElementById('locatario').value = inquilino;
+      highlightField('locatario');
+      encontrou = true;
+    }
+    if (endereco) {
+      document.getElementById('imovel').value = decodeAddressOnly(endereco);
+      highlightField('imovel');
+      encontrou = true;
+    }
+    if (dataInicio) {
+      var isoIni = toIsoDate(dataInicio);
+      if (isoIni) {
+        document.getElementById('dataInicio').value = isoIni;
+        highlightField('dataInicio');
+        encontrou = true;
+      }
+    }
+    if (dataFim) {
+      var isoFim = toIsoDate(dataFim);
+      if (isoFim) {
+        document.getElementById('dataTermino').value = isoFim;
+        highlightField('dataTermino');
+        encontrou = true;
+      }
+    }
+    if (link) {
+      document.getElementById('linkFotosHD').value = link;
+      encontrou = true;
+    }
+
+    return encontrou;
+  }
+
+  // Converte data (dd/mm/aaaa) para o formato ISO do <input type="date">
+  function toIsoDate(d) {
+    d = (d || '').trim();
+    var m = d.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    if (m) {
+      var ano = m[3].length === 2 ? '20' + m[3] : m[3];
+      var pad = function(n) { return (n.length < 2 ? '0' : '') + n; };
+      return ano + '-' + pad(m[2]) + '-' + pad(m[1]);
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d;
+    return '';
+  }
+
   function findTrueSignerAbove(lines, index) {
     for (var j = index - 1; j >= Math.max(0, index - 8); j--) {
       var candidate = lines[j].trim();
       if (isValidPersonName(candidate)) return cleanName(candidate);
     }
- return "";
+    return "";
   }
 
   function extractAddressAfterSituado(text) {
@@ -1374,7 +1464,7 @@
               '<span>Data de Vistoria: ' + dVistoria + '</span>' +
             '</div>' +
             '<div class="page-footer-copy">' +
-              'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.[cite: 1]' +
+              'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -1461,7 +1551,7 @@
               '<span>Data de Vistoria: ' + dVistoria + '</span>' +
             '</div>' +
             '<div class="page-footer-copy">' +
-              'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.[cite: 1]' +
+              'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -1537,18 +1627,18 @@
             'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos, leituras de medidores e o acervo fotográfico constante neste laudo para os ambientes e itens <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
           '</p>' +
           '<p style="margin-bottom:6px;">' +
-            'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas[cite: 1].' +
+            'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas.' +
           '</p>' +
           '<p style="color:#555; font-size:7.1pt;">' +
-            'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>[cite: 1], inspecionado pelo vistoriador <strong>' + currentVistoriadorEmail + '</strong>, dispensando assinaturas físicas manuscritas adicionais[cite: 1].' +
+            'Documento validado eletronicamente com integridade jurídica vinculada ao identificador Clicksign nº <strong>' + numContrato + '</strong>, inspecionado pelo vistoriador <strong>' + currentVistoriadorEmail + '</strong>, dispensando assinaturas físicas manuscritas adicionais.' +
           '</p>' +
         '</div>' +
 
         qrCodeHtml + // Insere bloco do QR Code HD se existir
 
         '<div class="laudo-copyright-notice">' +
-          '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.[cite: 1]<br>' +
-          'A reprodução, distribuição ou utilização deste modelo e sistema necessita de autorização prévia e expressa.[cite: 1]' +
+          '© Documento e metodologia técnica desenvolvidos por <strong>M&IC Corretores de Imóveis</strong>. Todos os direitos reservados.<br>' +
+          'A reprodução, distribuição ou utilização deste modelo e sistema necessita de autorização prévia e expressa.' +
         '</div>' +
 
         '<div class="page-footer-line">' +
@@ -1558,7 +1648,7 @@
             '<span>Data de Vistoria: ' + dVistoria + '</span>' +
           '</div>' +
           '<div class="page-footer-copy">' +
-            'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.[cite: 1]' +
+            'Desenvolvido por M&IC Corretores de Imóveis. Todos os direitos reservados. Uso exclusivo mediante autorização.' +
           '</div>' +
         '</div>' +
       '</div>';
