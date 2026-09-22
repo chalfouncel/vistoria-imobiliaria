@@ -823,6 +823,27 @@
   }
 
   // ============================================================================
+  // FUNÇÃO DE HIGIENIZAÇÃO DE ESPAÇOS EM SÍLABAS DO PDF
+  // ============================================================================
+  function sanitizePdfSpaces(text) {
+    if (!text) return "";
+    let t = text.replace(/\s+/g, " ").trim();
+    
+    // 1. Corrige letras maiúsculas soltas seguidas de minúsculas (ex: "I vy" -> "Ivy", "C arla" -> "Carla")
+    t = t.replace(/\b([A-Z])\s+([a-z]+)\b/g, "$1$2");
+    
+    // 2. Corrige sílabas soltas comuns (ex: "Car la" -> "Carla", "Pe reira" -> "Pereira")
+    t = t.replace(/\b([a-zA-Z]{2,})\s+(la|lo|ra|ro|na|no|vy|ny|ly|cy|sy|ma|me|mi|mo|mu)\b/gi, function(match, p1, p2) {
+        // Se a primeira parte for preposição (ex: "Maria da"), ignoramos para não juntar
+        const prep = ['de', 'da', 'do', 'das', 'dos'].includes(p1.toLowerCase());
+        if (prep) return match;
+        return p1 + p2; 
+    });
+    
+    return t;
+  }
+
+  // ============================================================================
   // LOGICA PRINCIPAL E ATUALIZADA DO PDF (MUITO MAIS ROBUSTA)
   // ============================================================================
   var contractInput = document.getElementById('contractFile');
@@ -912,34 +933,42 @@
 
     // Função interna para pescar tudo que vem depois da { Chave: } até a próxima chave ou o fim do bloco
     function capturarCampo(nomeCampo) {
-      var regex = new RegExp('\\{\\s*' + nomeCampo + '\\s*:\\s*\\}\\s*([\\s\\S]*?)(?=\\{\\s*[A-Za-z]+\\s*:|$)', 'i');
+      // RegEx aprimorada: Aceita os dois pontos dentro ou fora da chave, com ou sem espaços
+      var regex = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:]?\\s*\\}[:\\s-]*([\\s\\S]*?)(?=\\{\\s*[A-Za-z_]+\\s*[:]?\\s*\\}|$)', 'i');
       var match = bloco.match(regex);
-      if (!match || !match[1]) return "";
-      // Limpa excessos de espaços antes de devolver
+      if (!match || !match[1]) {
+          // Fallback para caso o valor esteja DENTRO das chaves (ex: {DataFim: 12/12/2026})
+          var regexInside = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:=]\\s*([^}]+)\\}', 'i');
+          var matchInside = bloco.match(regexInside);
+          if (matchInside && matchInside[1]) {
+              return matchInside[1].replace(/\s+/g, " ").trim();
+          }
+          return "";
+      }
       return match[1].replace(/\s+/g, " ").trim();
     }
 
-    var proprietario = capturarCampo("Proprietario");
-    var inquilino = capturarCampo("Inquilino");
-    var endereco = capturarCampo("Endereco");
-    var dataInicio = capturarCampo("DataInicio");
-    var dataFim = capturarCampo("DataFim");
-    var linkInfo = capturarCampo("link");
+    var proprietario = capturarCampo("Proprietario") || capturarCampo("Locador");
+    var inquilino = capturarCampo("Inquilino") || capturarCampo("Locatario");
+    var endereco = capturarCampo("Endereco") || capturarCampo("Imovel");
+    var dataInicio = capturarCampo("DataInicio") || capturarCampo("Data Inicial");
+    var dataFim = capturarCampo("DataFim") || capturarCampo("DataTermino") || capturarCampo("Data Termino") || capturarCampo("Data Final");
+    var linkInfo = capturarCampo("link") || capturarCampo("LinkFotos");
 
     var aplicou = false;
 
     if (proprietario) {
-      document.getElementById('locador').value = proprietario;
+      document.getElementById('locador').value = sanitizePdfSpaces(proprietario);
       highlightField('locador');
       aplicou = true;
     }
     if (inquilino) {
-      document.getElementById('locatario').value = inquilino;
+      document.getElementById('locatario').value = sanitizePdfSpaces(inquilino);
       highlightField('locatario');
       aplicou = true;
     }
     if (endereco) {
-      document.getElementById('imovel').value = decodeAddressOnly(endereco);
+      document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(endereco));
       highlightField('imovel');
       aplicou = true;
     }
@@ -961,7 +990,9 @@
     }
     if (linkInfo) {
       document.getElementById('linkFotosHD').value = linkInfo;
-      highlightField('linkFotosHD'); // OPCIONAL
+      if (document.getElementById('linkFotosHD').value !== "") {
+          highlightField('linkFotosHD'); // OPCIONAL
+      }
       aplicou = true;
     }
 
@@ -985,7 +1016,7 @@
       }
     }
     if (locadorEncontrado) {
-      document.getElementById('locador').value = locadorEncontrado;
+      document.getElementById('locador').value = sanitizePdfSpaces(locadorEncontrado);
       highlightField('locador');
     }
 
@@ -1001,19 +1032,19 @@
       }
     }
     if (locatarioEncontrado) {
-      document.getElementById('locatario').value = locatarioEncontrado;
+      document.getElementById('locatario').value = sanitizePdfSpaces(locatarioEncontrado);
       highlightField('locatario');
     }
 
     var addressRaw = extractAddressAfterSituado(page1Text);
     if (addressRaw) {
-      document.getElementById('imovel').value = decodeAddressOnly(addressRaw);
+      document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(addressRaw));
       highlightField('imovel');
     }
 
     var dateMatches = page1Text.match(/\b\d{2}\/\d{2}\/\d{4}\b/g);
     if (dateMatches && dateMatches.length >= 2) {
-      var toIso = function(d) { return d.split('/').reverse().join('-'); };
+      var toIso = function(d) { return toIsoDate(d); };
       document.getElementById('dataInicio').value = toIso(dateMatches[0]);
       document.getElementById('dataTermino').value = toIso(dateMatches[1]);
       highlightField('dataInicio');
@@ -1023,13 +1054,16 @@
 
   // Converte dd/mm/aaaa ou dd-mm-aaaa para yyyy-mm-dd (formato do campo date)
   function toIsoDate(d) {
-    var m = (d || '').trim().match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    var str = (d || '').trim();
+    // Busca a data em qualquer lugar da string caso venha sujeira de texto
+    var m = str.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
     if (m) {
       var ano = m[3].length === 2 ? '20' + m[3] : m[3];
       function pad(n) { return (n.length < 2 ? '0' : '') + n; }
       return ano + '-' + pad(m[2]) + '-' + pad(m[1]);
     }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    var iso = str.match(/\d{4}-\d{2}-\d{2}/);
+    if (iso) return iso[0];
     return '';
   }
 
