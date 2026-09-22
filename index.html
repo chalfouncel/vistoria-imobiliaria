@@ -829,12 +829,10 @@
     if (!text) return "";
     let t = text.replace(/\s+/g, " ").trim();
     
-    // 1. Corrige letras maiúsculas soltas seguidas de minúsculas (ex: "I vy" -> "Ivy", "C arla" -> "Carla")
+    // Corrige letras maiúsculas soltas seguidas de minúsculas
     t = t.replace(/\b([A-Z])\s+([a-z]+)\b/g, "$1$2");
-    
-    // 2. Corrige sílabas soltas comuns (ex: "Car la" -> "Carla", "Pe reira" -> "Pereira")
+    // Corrige sílabas soltas comuns
     t = t.replace(/\b([a-zA-Z]{2,})\s+(la|lo|ra|ro|na|no|vy|ny|ly|cy|sy|ma|me|mi|mo|mu)\b/gi, function(match, p1, p2) {
-        // Se a primeira parte for preposição (ex: "Maria da"), ignoramos para não juntar
         const prep = ['de', 'da', 'do', 'das', 'dos'].includes(p1.toLowerCase());
         if (prep) return match;
         return p1 + p2; 
@@ -886,18 +884,14 @@
         }
       }
 
-      // Concatena tudo num texto contínuo
       var textoInteiro = allRawLines.join(" ");
 
-      // Recuperar sempre o código Clicksign (presente nos 2 casos)
       var mUuid = textoInteiro.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
       if (mUuid) {
         document.getElementById('numContrato').value = mUuid[1];
         highlightField('numContrato');
       }
 
-      // DECISÃO DO MOTOR DE EXTRAÇÃO:
-      // Verifica se existe as tags com ou sem espaços pelo meio: [ MIC_DADOS ]
       var temBlocoMic = /\[\s*MIC_DADOS\s*\]/i.test(textoInteiro);
 
       if (temBlocoMic) {
@@ -908,7 +902,6 @@
           statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Aviso: Bloco [MIC_DADOS] encontrado, mas os parâmetros não puderam ser lidos.</span>';
         }
       } else {
-        // Se NÃO ACHOU o bloco de jeito nenhum, então roda o alternativo (V16 original)
         runContractExtractionV16(allRawLines, page1RawLines);
         statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Contrato lido. O bloco [MIC_DADOS] não foi localizado; foi utilizada a leitura alternativa do PDF.</span>';
       }
@@ -925,34 +918,36 @@
   // NOVO MOTOR DO BLOCO [MIC_DADOS] - ESTÁTICO, BLINDADO E DIRETO
   // ============================================================================
   function runMicDadosExtraction(textoInteiro) {
-    // 1. Extrai estritamente o conteúdo que fica entre [MIC_DADOS] e [/MIC_DADOS]
     var blocoMatch = textoInteiro.match(/\[\s*MIC_DADOS\s*\]([\s\S]*?)\[\s*\/\s*MIC_DADOS\s*\]/i);
     if (!blocoMatch) return false;
 
     var bloco = blocoMatch[1];
 
-    // Função interna para pescar tudo que vem depois da { Chave: } até a próxima chave ou o fim do bloco
     function capturarCampo(nomeCampo) {
-      // RegEx aprimorada: Aceita os dois pontos dentro ou fora da chave, com ou sem espaços
-      var regex = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:]?\\s*\\}[:\\s-]*([\\s\\S]*?)(?=\\{\\s*[A-Za-z_]+\\s*[:]?\\s*\\}|$)', 'i');
+      // 1. CAPTURA BLINDADA: Ignora a tag subsequente e pega TUDO até a próxima abertura de chave '{'
+      // Isso impede que tags com espaços e quebras falhem e engulam o restante do texto.
+      var regex = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:]?\\s*\\}[:\\s-]*([^{]+)', 'i');
       var match = bloco.match(regex);
-      if (!match || !match[1]) {
-          // Fallback para caso o valor esteja DENTRO das chaves (ex: {DataFim: 12/12/2026})
-          var regexInside = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:=]\\s*([^}]+)\\}', 'i');
-          var matchInside = bloco.match(regexInside);
-          if (matchInside && matchInside[1]) {
-              return matchInside[1].replace(/\s+/g, " ").trim();
-          }
-          return "";
+      if (match && match[1]) {
+          return match[1].replace(/\s+/g, " ").trim();
       }
-      return match[1].replace(/\s+/g, " ").trim();
+      
+      // 2. Fallback caso a formatação venha incorreta toda por dentro ex: {DataFim: 15/10/2026}
+      var regexInside = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:=]\\s*([^}]+)\\}', 'i');
+      var matchInside = bloco.match(regexInside);
+      if (matchInside && matchInside[1]) {
+          return matchInside[1].replace(/\s+/g, " ").trim();
+      }
+      
+      return "";
     }
 
     var proprietario = capturarCampo("Proprietario") || capturarCampo("Locador");
     var inquilino = capturarCampo("Inquilino") || capturarCampo("Locatario");
     var endereco = capturarCampo("Endereco") || capturarCampo("Imovel");
     var dataInicio = capturarCampo("DataInicio") || capturarCampo("Data Inicial");
-    var dataFim = capturarCampo("DataFim") || capturarCampo("DataTermino") || capturarCampo("Data Termino") || capturarCampo("Data Final");
+    // Adicionado "Data Fim" explícito nas alternativas de busca
+    var dataFim = capturarCampo("DataFim") || capturarCampo("Data Fim") || capturarCampo("DataTermino") || capturarCampo("Data Termino") || capturarCampo("Data Final");
     var linkInfo = capturarCampo("link") || capturarCampo("LinkFotos");
 
     var aplicou = false;
@@ -990,13 +985,28 @@
     }
     if (linkInfo) {
       document.getElementById('linkFotosHD').value = linkInfo;
-      if (document.getElementById('linkFotosHD').value !== "") {
-          highlightField('linkFotosHD'); // OPCIONAL
-      }
+      if (linkInfo !== "") highlightField('linkFotosHD');
       aplicou = true;
     }
 
     return aplicou;
+  }
+
+  // ============================================================================
+  // CONVERSOR DE DATAS COM REMOÇÃO AGRESSIVA DE ESPAÇOS
+  // ============================================================================
+  function toIsoDate(d) {
+    // Removemos TODOS os espaços antes de analisar. Impede falha caso o PDF entregue "15 / 10 / 2026"
+    var str = (d || '').replace(/\s+/g, '');
+    var m = str.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+    if (m) {
+      var ano = m[3].length === 2 ? '20' + m[3] : m[3];
+      function pad(n) { return (n.length < 2 ? '0' : '') + n; }
+      return ano + '-' + pad(m[2]) + '-' + pad(m[1]);
+    }
+    var iso = str.match(/\d{4}-\d{2}-\d{2}/);
+    if (iso) return iso[0];
+    return '';
   }
 
   // ============================================================================
@@ -1050,21 +1060,6 @@
       highlightField('dataInicio');
       highlightField('dataTermino');
     }
-  }
-
-  // Converte dd/mm/aaaa ou dd-mm-aaaa para yyyy-mm-dd (formato do campo date)
-  function toIsoDate(d) {
-    var str = (d || '').trim();
-    // Busca a data em qualquer lugar da string caso venha sujeira de texto
-    var m = str.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-    if (m) {
-      var ano = m[3].length === 2 ? '20' + m[3] : m[3];
-      function pad(n) { return (n.length < 2 ? '0' : '') + n; }
-      return ano + '-' + pad(m[2]) + '-' + pad(m[1]);
-    }
-    var iso = str.match(/\d{4}-\d{2}-\d{2}/);
-    if (iso) return iso[0];
-    return '';
   }
 
   function goToStepRooms() {
