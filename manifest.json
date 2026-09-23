@@ -1,0 +1,21 @@
+{
+  "name": "Vistoria Fácil Pro",
+  "short_name": "Vistoria Pro",
+  "description": "Aplicativo de Vistoria Pericial M&IC",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121315",
+  "theme_color": "#121315",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
