@@ -39,62 +39,73 @@
     background: linear-gradient(135deg, #0d0e10 0%, #1a1c20 70%, #2b261b 100%); 
     border-bottom: 3px solid #c59b27; 
     color: #fff; 
-    padding: 16px; 
-    text-align: center; 
+    padding: 12px 16px; 
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 12px;
+    text-align: left;
   }
   .app-header-logo {
-    max-height: 52px;
+    max-height: 46px;
     width: auto;
     object-fit: contain;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    flex-shrink: 0;
   }
-  header h1 { font-size: 1.22rem; font-weight: 800; color: #d4af37; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
-  header p { font-size: 0.76rem; opacity: 0.85; }
+  header h1 { font-size: 1.15rem; font-weight: 800; color: #d4af37; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); line-height: 1.1; margin-bottom: 2px; }
+  header p { font-size: 0.72rem; opacity: 0.85; line-height: 1.2; }
 
   .user-bar { display: none; justify-content: space-between; align-items: center; background: #20242a; color: #cfd4dc; padding: 6px 16px; font-size: 0.78rem; border-bottom: 1px solid #333; }
   .user-bar span { color: #d4af37; font-weight: bold; }
   .user-bar .time-chip { background: #121315; border: 1px solid #c59b27; color: #dfba48; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; margin-left: 8px; }
   .btn-logout-link { background: none; border: none; color: #ff6b6b; cursor: pointer; text-decoration: underline; font-size: 0.78rem; }
 
-  .container { max-width: 650px; margin: 16px auto; padding: 0 16px; }
-  .card { background: var(--card); border-radius: 12px; padding: 18px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--border); }
-  .card h2 { font-size: 1.05rem; color: var(--secondary); margin-bottom: 12px; border-bottom: 2px solid #eef2f5; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .container { max-width: 650px; margin: 10px auto; padding: 0 12px; }
+  .card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--border); }
+  .card h2 { font-size: 1rem; color: var(--secondary); margin-bottom: 10px; border-bottom: 2px solid #eef2f5; padding-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
   
   .step { display: none; }
   .step.active { display: block; animation: fadeIn 0.25s ease-in-out; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-  label { display: block; font-size: 0.84rem; font-weight: 700; color: #343a40; margin-bottom: 4px; margin-top: 12px; }
+  label { display: block; font-size: 0.8rem; font-weight: 700; color: #343a40; margin-bottom: 3px; margin-top: 8px; }
   input[type="text"], input[type="url"], input[type="date"], input[type="password"], input[type="email"], textarea, select {
-    width: 100%; padding: 12px; border: 1.5px solid #ced4da; border-radius: 8px; font-size: 0.95rem; background: #fff; color: #212529; font-weight: 500;
+    width: 100%; padding: 10px; border: 1.5px solid #ced4da; border-radius: 6px; font-size: 0.9rem; background: #fff; color: #212529; font-weight: 500;
   }
   input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus, input[type="url"]:focus { border-color: #007bff; outline: none; }
   .field-ok { background-color: #e8f5e9 !important; border-color: #28a745 !important; }
   input[type="file"] { display: none; }
 
   .file-dropzone {
-    border: 2px dashed #c59b27; border-radius: 12px; padding: 24px 16px; text-align: center; background: #faf8f2; cursor: pointer; display: block;
+    border: 1.5px dashed #c59b27; border-radius: 8px; padding: 12px; background: #faf8f2; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px;
   }
-  .file-dropzone svg { width: 38px; height: 38px; fill: #c59b27; margin-bottom: 6px; }
+  .file-dropzone svg { width: 28px; height: 28px; fill: #c59b27; flex-shrink: 0; }
+  .file-dropzone-text { display: flex; flex-direction: column; text-align: left; }
+  .file-dropzone-text strong { font-size: 0.9rem; color: #121315; }
+  .file-dropzone-text span { font-size: 0.72rem; color: #888; margin-top: 2px; }
 
   .status-tag { display: inline-block; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; margin-top: 8px; }
   .tag-ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
 
   .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .checkbox-card {
-    background: #f8f9fa; border: 1.5px solid #dee2e6; border-radius: 8px; padding: 12px 10px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 500;
+    background: #f8f9fa; border: 1.5px solid #dee2e6; border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 500;
   }
   .checkbox-card input { transform: scale(1.2); }
   .checkbox-card.checked { background: #e8f4fd; border-color: #007bff; color: #007bff; font-weight: 700; }
   .checkbox-card.special-room { border-color: #c59b27; background: #fdfbf7; }
 
-  .btn { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 14px 16px; border-radius: 8px; border: none; font-size: 1rem; font-weight: 600; cursor: pointer; transition: 0.2s; gap: 8px; margin-top: 14px; text-decoration: none; }
+  .vistoria-tipo-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; }
+  .vistoria-tipo-card { position:relative; border:1.5px solid #ced4da; border-radius:8px; padding:8px; cursor:pointer; background:#f8f9fa; text-align:center; }
+  .vistoria-tipo-card input { position:absolute; opacity:0; pointer-events:none; }
+  .vistoria-tipo-card strong { display:block; font-size:.85rem; }
+  .vistoria-tipo-card span { display:block; font-size:.68rem; color:#6c757d; margin-top:2px; }
+  .vistoria-tipo-card:has(input:checked) { border-color:#c59b27; background:#fff8df; box-shadow:0 0 0 1px #c59b27 inset; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 12px 14px; border-radius: 8px; border: none; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: 0.2s; gap: 8px; margin-top: 10px; text-decoration: none; }
   .btn-primary { background: linear-gradient(135deg, #c59b27, #dfba48); color: #121315; font-weight: 700; border: 1px solid #b88d1e; text-shadow: 0 0 1px rgba(255,255,255,0.4); }
   .btn-camera { background: #28a745; color: #fff; }
   .btn-next { background: #203a43; color: #fff; }
@@ -130,7 +141,7 @@
   .badge-special { background: #c59b27; }
   .room-header { background: #eef2f5; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #007bff; }
   
-  .loader-box { display: none; text-align: center; padding: 16px 10px; background: #fdfdfd; border-radius: 8px; border: 1px solid #e9ecef; margin-top: 14px; }
+  .loader-box { display: none; text-align: center; padding: 16px 10px; background: #fdfdfd; border-radius: 8px; border: 1px solid #e9ecef; margin-top: 10px; }
   .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 34px; height: 34px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
@@ -346,13 +357,6 @@
 
   .termo-concordancia-box { font-size: 7.5pt; text-align: justify; line-height: 1.45; margin-top: 14px; color: #222; background: #f9fbfc; padding: 10px 12px; border: 1px solid #e1e4e8; border-radius: 4px; }
   .laudo-copyright-notice { font-size: 6.8pt; color: #555; text-align: center; margin-top: 14px; padding: 6px 8px; background: #f8f9fa; border: 1px dashed #ced4da; border-radius: 4px; }
-
-  .vistoria-tipo-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
-  .vistoria-tipo-card { position:relative; border:1.5px solid #ced4da; border-radius:10px; padding:12px; cursor:pointer; background:#f8f9fa; text-align:center; }
-  .vistoria-tipo-card input { position:absolute; opacity:0; pointer-events:none; }
-  .vistoria-tipo-card strong { display:block; font-size:.92rem; }
-  .vistoria-tipo-card span { display:block; font-size:.72rem; color:#6c757d; margin-top:3px; }
-  .vistoria-tipo-card:has(input:checked) { border-color:#c59b27; background:#fff8df; box-shadow:0 0 0 1px #c59b27 inset; }
 </style>
 </head>
 <body>
@@ -396,7 +400,7 @@
   <img src="/logo.png" alt="M&IC Corretores" class="app-header-logo">
   <div>
     <h1>VISTORIA DE LOCAÇÃO COM IA</h1>
-    <p>Auditoria Fotográfica Pericial & Emissão de Laudo Técnico A4 | M&IC Corretores de Imóveis</p>
+    <p>Auditoria Pericial & Emissão de Laudo A4 | M&IC</p>
   </div>
 </header>
 
@@ -406,12 +410,13 @@
   <div id="step-contract" class="step active">
     <div class="card">
       <h2>1. Contrato de Locação</h2>
-      <p style="font-size:0.82rem; color:#6c757d; margin-bottom:12px;">Selecione o arquivo do contrato assinado (Clicksign):</p>
       
       <label for="contractFile" class="file-dropzone">
         <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-        <div><strong>Toque para selecionar o Contrato (.PDF)</strong></div>
-        <span id="fileNameNotice" style="font-size:0.75rem; color:#888;">Arquivo assinado Clicksign</span>
+        <div class="file-dropzone-text">
+          <strong>Toque para anexar Contrato (.PDF)</strong>
+          <span id="fileNameNotice">Arquivo assinado Clicksign</span>
+        </div>
       </label>
       <input type="file" id="contractFile" accept="application/pdf">
 
@@ -420,14 +425,20 @@
         <div id="parseLoaderMsg" style="font-size:0.85rem; font-weight:600; color:#007bff;">Fazendo leitura direta do contrato...</div>
       </div>
 
-      <div id="statusNoticeArea" style="margin-top:8px;"></div>
+      <div id="statusNoticeArea" style="margin-top:4px;"></div>
 
-      <div style="margin-top:14px;">
-        <label>Locador(a):</label>
-        <input type="text" id="locador" placeholder="Nome do(a) Locador(a)">
-
-        <label>Locatário(a):</label>
-        <input type="text" id="locatario" placeholder="Nome do(a) Locatário(a)">
+      <div style="margin-top:8px;">
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <div>
+            <label>Locador(a):</label>
+            <input type="text" id="locador" placeholder="Nome do Locador">
+          </div>
+          <div>
+            <label>Locatário(a):</label>
+            <input type="text" id="locatario" placeholder="Nome do Locatário">
+          </div>
+        </div>
 
         <label>Endereço do Imóvel:</label>
         <input type="text" id="imovel" placeholder="Endereço do Imóvel">
@@ -436,18 +447,26 @@
         <div class="vistoria-tipo-grid">
           <label class="vistoria-tipo-card">
             <input type="radio" name="tipoVistoria" id="tipoEntrada" value="Entrada" checked>
-            <strong>🟢 VISTORIA DE ENTRADA</strong>
-            <span>Condições iniciais de ocupação</span>
+            <strong>🟢 VISTORIA ENTRADA</strong>
+            <span>Início de ocupação</span>
           </label>
           <label class="vistoria-tipo-card">
             <input type="radio" name="tipoVistoria" id="tipoSaida" value="Saída">
-            <strong>🔴 VISTORIA DE SAÍDA</strong>
-            <span>Condições na devolução do imóvel</span>
+            <strong>🔴 VISTORIA SAÍDA</strong>
+            <span>Devolução do imóvel</span>
           </label>
         </div>
 
-        <label>Número do Contrato / Clicksign ID:</label>
-        <input type="text" id="numContrato" placeholder="ID / Hash Clicksign">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <div>
+            <label>Nº do Contrato / ID:</label>
+            <input type="text" id="numContrato" placeholder="Hash Clicksign">
+          </div>
+          <div>
+            <label>Data da Vistoria:</label>
+            <input type="date" id="dataVistoria">
+          </div>
+        </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
           <div>
@@ -459,9 +478,6 @@
             <input type="date" id="dataTermino">
           </div>
         </div>
-
-        <label>Data da Vistoria:</label>
-        <input type="date" id="dataVistoria">
 
         <input type="hidden" id="emailContestacao" value="">
         <input type="hidden" id="prazoContestacao" value="">
@@ -1311,7 +1327,6 @@
     try {
       if (aiText) aiText.innerText = 'Iniciando análise simultânea de todos os ambientes com IA...';
 
-      // Dispara a análise de TODOS os cômodos/itens em PARALELO para máxima velocidade
       var auditPromises = selectedRooms.map(async function(room, i) {
         var rData = roomsData[room];
 
@@ -1329,7 +1344,6 @@
         rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos);
       });
 
-      // Aguarda todas as IAs terminarem ao mesmo tempo
       await Promise.all(auditPromises);
 
       if (aiText) aiText.innerText = 'Todas as análises concluídas. Gerando o PDF pericial...';
