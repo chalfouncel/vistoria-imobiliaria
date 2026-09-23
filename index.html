@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Vistoria Fácil Pro — M&IC</title>
 <link rel="icon" type="image/png" href="/favicon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#121315">
+<link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -471,7 +474,7 @@
     </div>
   </div>
 
-  <!-- ETAPA 2: AMBIENTES (CÔMODOS PRIMEIRO, ITENS TÉCNICOS DEPOIS) -->
+  <!-- ETAPA 2: AMBIENTES E ITENS -->
   <div id="step-rooms" class="step">
     <div class="card">
       <h2>2. Seleção de Ambientes e Itens Técnicos</h2>
@@ -784,66 +787,6 @@
     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   }
 
-  function findTrueSignerAbove(lines, index) {
-    for (var j = index - 1; j >= Math.max(0, index - 8); j--) {
-      var candidate = lines[j].trim();
-      if (isValidPersonName(candidate)) return cleanName(candidate);
-    }
-    return "";
-  }
-
-  function extractAddressAfterSituado(text) {
-    if (!text) return "";
-    var normText = cleanSearch(text);
-    var indexSituado = normText.indexOf("situado");
-
-    if (indexSituado !== -1) {
-      var afterSituado = text.substring(indexSituado + 7).trim();
-      afterSituado = afterSituado.replace(/^(?:na|no|à|a|em|:)\s+/i, '').trim();
-      var addressCandidate = afterSituado.split(/[;\.\r\n]/)[0].trim();
-      addressCandidate = addressCandidate.replace(/(?:,?\s*destinado\s+exclusivamente|para\s+fins\s+residenciais|conforme).*/i, '').trim();
-      if (addressCandidate.length > 5) return addressCandidate;
-    }
-
-    var indexImovel = normText.indexOf("imovel:");
-    if (indexImovel !== -1) {
-      var afterImov = text.substring(indexImovel + 7).trim();
-      var addr = afterImov.split(/[;\.\r\n]/)[0].trim();
-      return addr.replace(/(?:destinado|para\s+fins).*/i, '').trim();
-    }
-    return "";
-  }
-
-  function highlightField(id) {
-    var el = document.getElementById(id);
-    if (el) {
-      el.classList.add('field-ok');
-      setTimeout(function() { el.classList.remove('field-ok'); }, 3000);
-    }
-  }
-
-  // ============================================================================
-  // FUNÇÃO DE HIGIENIZAÇÃO DE ESPAÇOS EM SÍLABAS DO PDF
-  // ============================================================================
-  function sanitizePdfSpaces(text) {
-    if (!text) return "";
-    let t = text.replace(/\s+/g, " ").trim();
-    
-    // Corrige letras maiúsculas soltas seguidas de minúsculas
-    t = t.replace(/\b([A-Z])\s+([a-z]+)\b/g, "$1$2");
-    // Corrige sílabas soltas comuns
-    t = t.replace(/\b([a-zA-Z]{2,})\s+(la|lo|ra|ro|na|no|vy|ny|ly|cy|sy|ma|me|mi|mo|mu)\b/gi, function(match, p1, p2) {
-        const prep = ['de', 'da', 'do', 'das', 'dos'].includes(p1.toLowerCase());
-        if (prep) return match;
-        return p1 + p2; 
-    });
-    
-    return t;
-  }
-
-  // ============================================================================
-  // LOGICA PRINCIPAL E ATUALIZADA DO PDF (MUITO MAIS ROBUSTA)
-  // ============================================================================
   var contractInput = document.getElementById('contractFile');
   contractInput.addEventListener('change', async function(e) {
     var file = e.target.files[0];
@@ -855,7 +798,6 @@
     loader.style.display = 'block';
     statusArea.innerHTML = '';
 
-    // Limpa todos os campos para a nova leitura
     document.getElementById('locador').value = '';
     document.getElementById('locatario').value = '';
     document.getElementById('imovel').value = '';
@@ -914,9 +856,6 @@
     }
   });
 
-  // ============================================================================
-  // NOVO MOTOR DO BLOCO [MIC_DADOS] - ESTÁTICO, BLINDADO E DIRETO
-  // ============================================================================
   function runMicDadosExtraction(textoInteiro) {
     var blocoMatch = textoInteiro.match(/\[\s*MIC_DADOS\s*\]([\s\S]*?)\[\s*\/\s*MIC_DADOS\s*\]/i);
     if (!blocoMatch) return false;
@@ -924,15 +863,12 @@
     var bloco = blocoMatch[1];
 
     function capturarCampo(nomeCampo) {
-      // 1. CAPTURA BLINDADA: Ignora a tag subsequente e pega TUDO até a próxima abertura de chave '{'
-      // Isso impede que tags com espaços e quebras falhem e engulam o restante do texto.
       var regex = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:]?\\s*\\}[:\\s-]*([^{]+)', 'i');
       var match = bloco.match(regex);
       if (match && match[1]) {
           return match[1].replace(/\s+/g, " ").trim();
       }
       
-      // 2. Fallback caso a formatação venha incorreta toda por dentro ex: {DataFim: 15/10/2026}
       var regexInside = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:=]\\s*([^}]+)\\}', 'i');
       var matchInside = bloco.match(regexInside);
       if (matchInside && matchInside[1]) {
@@ -946,7 +882,6 @@
     var inquilino = capturarCampo("Inquilino") || capturarCampo("Locatario");
     var endereco = capturarCampo("Endereco") || capturarCampo("Imovel");
     var dataInicio = capturarCampo("DataInicio") || capturarCampo("Data Inicial");
-    // Adicionado "Data Fim" explícito nas alternativas de busca
     var dataFim = capturarCampo("DataFim") || capturarCampo("Data Fim") || capturarCampo("DataTermino") || capturarCampo("Data Termino") || capturarCampo("Data Final");
     var linkInfo = capturarCampo("link") || capturarCampo("LinkFotos");
 
@@ -992,11 +927,7 @@
     return aplicou;
   }
 
-  // ============================================================================
-  // CONVERSOR DE DATAS COM REMOÇÃO AGRESSIVA DE ESPAÇOS
-  // ============================================================================
   function toIsoDate(d) {
-    // Removemos TODOS os espaços antes de analisar. Impede falha caso o PDF entregue "15 / 10 / 2026"
     var str = (d || '').replace(/\s+/g, '');
     var m = str.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
     if (m) {
@@ -1009,9 +940,6 @@
     return '';
   }
 
-  // ============================================================================
-  // MOTOR ANTIGO V16 - SOMENTE SERÁ ACIONADO SE NÃO EXISTIR [MIC_DADOS]
-  // ============================================================================
   function runContractExtractionV16(allLines, page1Lines) {
     var page1Text = page1Lines.join(" ");
     var locadorEncontrado = "";
@@ -1060,6 +988,56 @@
       highlightField('dataInicio');
       highlightField('dataTermino');
     }
+  }
+
+  function findTrueSignerAbove(lines, index) {
+    for (var j = index - 1; j >= Math.max(0, index - 8); j--) {
+      var candidate = lines[j].trim();
+      if (isValidPersonName(candidate)) return cleanName(candidate);
+    }
+    return "";
+  }
+
+  function extractAddressAfterSituado(text) {
+    if (!text) return "";
+    var normText = cleanSearch(text);
+    var indexSituado = normText.indexOf("situado");
+
+    if (indexSituado !== -1) {
+      var afterSituado = text.substring(indexSituado + 7).trim();
+      afterSituado = afterSituado.replace(/^(?:na|no|à|a|em|:)\s+/i, '').trim();
+      var addressCandidate = afterSituado.split(/[;\.\r\n]/)[0].trim();
+      addressCandidate = addressCandidate.replace(/(?:,?\s*destinado\s+exclusivamente|para\s+fins\s+residenciais|conforme).*/i, '').trim();
+      if (addressCandidate.length > 5) return addressCandidate;
+    }
+
+    var indexImovel = normText.indexOf("imovel:");
+    if (indexImovel !== -1) {
+      var afterImov = text.substring(indexImovel + 7).trim();
+      var addr = afterImov.split(/[;\.\r\n]/)[0].trim();
+      return addr.replace(/(?:destinado|para\s+fins).*/i, '').trim();
+    }
+    return "";
+  }
+
+  function highlightField(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.classList.add('field-ok');
+      setTimeout(function() { el.classList.remove('field-ok'); }, 3000);
+    }
+  }
+
+  function sanitizePdfSpaces(text) {
+    if (!text) return "";
+    let t = text.replace(/\s+/g, " ").trim();
+    t = t.replace(/\b([A-Z])\s+([a-z]+)\b/g, "$1$2");
+    t = t.replace(/\b([a-zA-Z]{2,})\s+(la|lo|ra|ro|na|no|vy|ny|ly|cy|sy|ma|me|mi|mo|mu)\b/gi, function(match, p1, p2) {
+        const prep = ['de', 'da', 'do', 'das', 'dos'].includes(p1.toLowerCase());
+        if (prep) return match;
+        return p1 + p2; 
+    });
+    return t;
   }
 
   function goToStepRooms() {
@@ -1223,9 +1201,6 @@
     }
   }
 
-  // ==========================================================================
-  // COMPRESSÃO DE IMAGEM MELHORADA (preserva resolução até 1600px)
-  // ==========================================================================
   var cameraInput = document.getElementById('cameraInput');
   cameraInput.addEventListener('change', function(e) {
     var file = e.target.files[0];
@@ -1334,8 +1309,10 @@
     aiLoader.style.display = 'block';
 
     try {
-      for (var i = 0; i < selectedRooms.length; i++) {
-        var room = selectedRooms[i];
+      if (aiText) aiText.innerText = 'Iniciando análise simultânea de todos os ambientes com IA...';
+
+      // Dispara a análise de TODOS os cômodos/itens em PARALELO para máxima velocidade
+      var auditPromises = selectedRooms.map(async function(room, i) {
         var rData = roomsData[room];
 
         if (rData.unavailable) {
@@ -1345,20 +1322,22 @@
             fotos: [],
             ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
           };
-          continue;
+          return;
         }
 
-        var photos = rData.photos;
-        if (aiText) aiText.innerText = 'Gemini analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ')...';
-        rData.aiAnalysis = await callGeminiPericialIndividual(room, photos);
-      }
+        if (aiText) aiText.innerText = 'Analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ') em paralelo...';
+        rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos);
+      });
 
-      if (aiText) aiText.innerText = 'Análises concluídas. Gerando o PDF pericial...';
+      // Aguarda todas as IAs terminarem ao mesmo tempo
+      await Promise.all(auditPromises);
+
+      if (aiText) aiText.innerText = 'Todas as análises concluídas. Gerando o PDF pericial...';
       await renderAndGeneratePdf();
 
     } catch (e) {
       console.error('Falha na geração do laudo:', e);
-      alert('Ocorreu uma falha na análise pela IA:\n' + (e.message || String(e)));
+      alert('Ocorreu uma falha na análise pelas IAs:\n' + (e.message || String(e)));
     } finally {
       btnFinish.disabled = false;
       btnFinish.style.opacity = '1';
@@ -1753,6 +1732,14 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js');
+    });
   }
 </script>
 
