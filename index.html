@@ -142,8 +142,10 @@
   .room-header { background: #eef2f5; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #007bff; }
   
   .loader-box { display: none; text-align: center; padding: 16px 10px; background: #fdfdfd; border-radius: 8px; border: 1px solid #e9ecef; margin-top: 10px; }
-  .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 34px; height: 34px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
-  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  
+  /* ESTILOS DA BARRA DE PROGRESSO */
+  .progress-bar-container { width: 100%; background-color: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden; margin-bottom: 10px; border: 1px solid #cbd5e1; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
+  .progress-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #007bff, #0056b3); transition: width 0.4s ease-out; }
 
   .app-copyright {
     text-align: center;
@@ -420,8 +422,11 @@
       </label>
       <input type="file" id="contractFile" accept="application/pdf">
 
+      <!-- Antigo loader foi removido. Nova barra de progresso para a leitura do PDF -->
       <div id="parseLoader" class="loader-box">
-        <div class="spinner"></div>
+        <div class="progress-bar-container">
+          <div id="parseProgressFill" class="progress-bar-fill"></div>
+        </div>
         <div id="parseLoaderMsg" style="font-size:0.85rem; font-weight:600; color:#007bff;">Fazendo leitura direta do contrato...</div>
       </div>
 
@@ -553,9 +558,12 @@
 
       <button id="btnFinish" class="btn btn-primary" style="display:none;" onclick="startGeminiAuditAndPdf()">Gerar Laudo Pericial com IA Gemini ★</button>
 
+      <!-- BARRA DE PROGRESSO DA IA -->
       <div id="aiLoader" class="loader-box">
-        <div class="spinner"></div>
-        <div id="aiLoaderText" style="font-size:0.85rem; font-weight:600; color:#007bff;">O Gemini está analisando os detalhes técnicos...</div>
+        <div class="progress-bar-container">
+          <div id="progressFill" class="progress-bar-fill"></div>
+        </div>
+        <div id="aiLoaderText" style="font-size:0.85rem; font-weight:600; color:#007bff;">Iniciando análise inteligente...</div>
       </div>
     </div>
   </div>
@@ -810,8 +818,11 @@
 
     document.getElementById('fileNameNotice').innerText = file.name;
     var loader = document.getElementById('parseLoader');
+    var progressFill = document.getElementById('parseProgressFill');
     var statusArea = document.getElementById('statusNoticeArea');
+    
     loader.style.display = 'block';
+    progressFill.style.width = '30%'; // Inicia visualmente
     statusArea.innerHTML = '';
 
     document.getElementById('locador').value = '';
@@ -824,6 +835,7 @@
 
     try {
       var arrayBuffer = await file.arrayBuffer();
+      progressFill.style.width = '60%';
       var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       
       var allRawLines = [];
@@ -842,6 +854,7 @@
         }
       }
 
+      progressFill.style.width = '90%';
       var textoInteiro = allRawLines.join(" ");
 
       var mUuid = textoInteiro.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
@@ -864,11 +877,13 @@
         statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Contrato lido. O bloco [MIC_DADOS] não foi localizado; foi utilizada a leitura alternativa do PDF.</span>';
       }
 
+      progressFill.style.width = '100%';
+
     } catch (err) {
       console.error(err);
       statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Erro ao processar PDF: ' + err.message + '</span>';
     } finally {
-      loader.style.display = 'none';
+      setTimeout(() => { loader.style.display = 'none'; }, 600);
     }
   });
 
@@ -1302,6 +1317,7 @@
     var btnFinish = document.getElementById('btnFinish');
     var aiLoader = document.getElementById('aiLoader');
     var aiText = document.getElementById('aiLoaderText');
+    var progressFill = document.getElementById('progressFill');
 
     if (!selectedRooms || !selectedRooms.length) {
       alert('Nenhum item ou ambiente foi selecionado.');
@@ -1324,8 +1340,20 @@
     btnFinish.style.opacity = '0.65';
     aiLoader.style.display = 'block';
 
+    var completedTasks = 0;
+    // O total de tarefas = (número de cômodos) + 1 (geração do PDF)
+    var totalTasks = selectedRooms.length + 1;
+
+    function updateProgress(msg) {
+      completedTasks++;
+      var percent = Math.round((completedTasks / totalTasks) * 100);
+      progressFill.style.width = percent + '%';
+      if (aiText) aiText.innerText = msg + ' (' + percent + '%)';
+    }
+
     try {
-      if (aiText) aiText.innerText = 'Iniciando análise simultânea de todos os ambientes com IA...';
+      progressFill.style.width = '0%';
+      if (aiText) aiText.innerText = 'Iniciando análise com IA (0%)...';
 
       var auditPromises = selectedRooms.map(async function(room, i) {
         var rData = roomsData[room];
@@ -1337,17 +1365,21 @@
             fotos: [],
             ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
           };
+          updateProgress('Analisado: ' + room);
           return;
         }
 
-        if (aiText) aiText.innerText = 'Analisando ' + room + ' (' + (i + 1) + '/' + selectedRooms.length + ') em paralelo...';
         rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos);
+        updateProgress('Analisado: ' + room);
       });
 
       await Promise.all(auditPromises);
 
-      if (aiText) aiText.innerText = 'Todas as análises concluídas. Gerando o PDF pericial...';
+      if (aiText) aiText.innerText = 'Gerando documento PDF final... (' + Math.round((completedTasks/totalTasks)*100) + '%)';
+      
       await renderAndGeneratePdf();
+      
+      updateProgress('Laudo Pericial Concluído!');
 
     } catch (e) {
       console.error('Falha na geração do laudo:', e);
@@ -1355,7 +1387,7 @@
     } finally {
       btnFinish.disabled = false;
       btnFinish.style.opacity = '1';
-      aiLoader.style.display = 'none';
+      setTimeout(() => { aiLoader.style.display = 'none'; }, 1000);
     }
   }
 
@@ -1665,7 +1697,7 @@
         '<div class="room-banner" style="margin-top:16px;">6. TERMO DE CONCORDÂNCIA E ENCERRAMENTO</div>' +
         '<div class="termo-concordancia-box">' +
           '<p style="margin-bottom:6px;">' +
-            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos, leituras de medidores e o acervo fotográfico constante neste laudo para os ambientes e itens <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
+            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elements, leituras de medidores e o acervo fotográfico constante neste laudo para os ambientes e itens <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
           '</p>' +
           '<p style="margin-bottom:6px;">' +
             'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas.' +
