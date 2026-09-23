@@ -10,9 +10,10 @@ export default async function handler(req, res) {
 
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const groqApiKey = process.env.GROQ2_API_KEY;
+  const vistoriaOpenApiKey = process.env.VISTORIA_OPEN_API_KEY;
 
-  if (!geminiApiKey && !groqApiKey) {
-    return res.status(500).json({ error: 'Configure GEMINI_API_KEY ou GROQ2_API_KEY nas variáveis de ambiente da Vercel.' });
+  if (!geminiApiKey && !groqApiKey && !vistoriaOpenApiKey) {
+    return res.status(500).json({ error: 'Configure GEMINI_API_KEY, GROQ2_API_KEY ou VISTORIA_OPEN_API_KEY nas variáveis de ambiente da Vercel.' });
   }
 
   const { roomName, photosDataUrls, isMeterReading } = req.body;
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
   }
 
   // ------------------------------------------------------------------
-  // PROMPT ÚNICO (usado por Gemini e Groq)
+  // PROMPT ÚNICO (usado por todos os provedores)
   // ------------------------------------------------------------------
   const promptBase = `Você é perito de vistoria imobiliária. Analise TODAS as fotos do ambiente ou item "${roomName}" em conjunto. 
 Compare as imagens, mas descreva cada foto apenas pelo que está visível nela. 
@@ -40,7 +41,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
   const prompt = promptBase + promptMeter;
 
   // ------------------------------------------------------------------
-  // SCHEMA JSON (Gemini usa nativamente; Groq recebe no prompt)
+  // SCHEMA JSON (Gemini usa nativamente; OpenRouter/Groq recebem no prompt)
   // ------------------------------------------------------------------
   const schema = {
     type: "object",
@@ -95,8 +96,17 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
       let resultadoLote = null;
       const errosLote = [];
 
-      // 1) Tenta Gemini primeiro
-      if (geminiApiKey) {
+      // 1) Tenta OpenRouter (VISTORIA_OPEN_API_KEY) primeiro
+      if (vistoriaOpenApiKey) {
+        try {
+          resultadoLote = await chamarOpenRouter(vistoriaOpenApiKey, lote, promptLote, schema);
+        } catch (err) {
+          errosLote.push('OpenRouter: ' + err.message);
+        }
+      }
+
+      // 2) Se OpenRouter falhar, tenta Gemini
+      if (!resultadoLote && geminiApiKey) {
         try {
           resultadoLote = await chamarGemini(geminiApiKey, lote, promptLote, schema);
         } catch (err) {
@@ -104,7 +114,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
         }
       }
 
-      // 2) Se Gemini falhar, tenta Groq
+      // 3) Se Gemini falhar, tenta Groq
       if (!resultadoLote && groqApiKey) {
         try {
           resultadoLote = await chamarGroq(groqApiKey, lote, promptLote, schema);
@@ -184,6 +194,57 @@ function unificarResultados(resultadosParciais, totalFotos, roomName) {
   };
 }
 
+// ============================================================================
+// OPENROUTER (VISTORIA_OPEN_API_KEY) — PROVEDOR PRINCIPAL
+// ============================================================================
+async function chamarOpenRouter(apiKey, photosDataUrls, prompt, schema) {
+  if (photosDataUrls.length > 3) {
+    throw new Error('OpenRouter aceita no máximo 3 imagens por request.');
+  }
+
+  const content = [
+    { type: "text", text: prompt + '\n\nResponda APENAS com um JSON válido, sem markdown, seguindo exatamente este schema: ' + JSON.stringify(schema) },
+    ...photosDataUrls.map((url, idx) => ({
+      type: "image_url",
+      image_url: { url: url }
+    }))
+  ];
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://vistoria-imobiliaria.vercel.app',
+      'X-Title': 'Vistoria Imobiliária'
+    },
+    body: JSON.stringify({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenRouter HTTP ${response.status}: ${err}`);
+  }
+
+  const data = await response.json();
+  const contentText = data.choices?.[0]?.message?.content;
+
+  if (!contentText) {
+    throw new Error('OpenRouter respondeu sem conteúdo.');
+  }
+
+  // Limpa possível markdown ```json ... ```
+  const jsonLimpo = contentText.replace(/```json\s?|```/g, '').trim();
+  return JSON.parse(jsonLimpo);
+}
+
+// ============================================================================
+// GEMINI
+// ============================================================================
 async function chamarGemini(geminiApiKey, photosDataUrls, prompt, schema) {
   const parts = [{ text: prompt }];
   photosDataUrls.forEach((dataUrl, idx) => {
@@ -253,6 +314,9 @@ async function chamarGemini(geminiApiKey, photosDataUrls, prompt, schema) {
   throw new Error('Todos os modelos Gemini falharam.');
 }
 
+// ============================================================================
+// GROQ
+// ============================================================================
 async function chamarGroq(groqApiKey, photosDataUrls, prompt, schema) {
   // Groq só aceita até 3 imagens por request (já garantido pelo caller)
   if (photosDataUrls.length > 3) {
