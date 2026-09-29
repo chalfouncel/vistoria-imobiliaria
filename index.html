@@ -40,12 +40,12 @@
     border-bottom: 3px solid #c59b27; 
     color: #fff; 
     padding: 12px 16px; 
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    text-align: left;
+    display: flex; 
+    flex-direction: row; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 12px; 
+    text-align: left; 
   }
   .app-header-logo {
     max-height: 46px;
@@ -626,8 +626,8 @@
 <div id="pdfTemplateWrapper"></div>
 
 <script>
-  const SUPABASE_URL = 'https://hxwxxrxbgrmlhmtmszcp.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_qGU-Xmh2FNapx_bWu8VAAw_zMA1gHvf';
+  const SUPABASE_URL = 'https://uztsmkhlvoemjbbyebcr.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_nmolEh_G5_hKcfdgy2Xpeg_s4T6ePAz';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   let currentVistoriadorEmail = "Não identificado";
@@ -1304,7 +1304,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         roomName: roomName, 
-        photosDataUrls: photosDataUrls,
+        photosDataUrls: photosDataUrls, 
         isMeterReading: (cleanSearch(roomName).indexOf("luz") !== -1 || cleanSearch(roomName).indexOf("gas") !== -1)
       })
     });
@@ -1724,7 +1724,7 @@
         '<div class="room-banner" style="margin-top:16px;">6. TERMO DE CONCORDÂNCIA E ENCERRAMENTO</div>' +
         '<div class="termo-concordancia-box">' +
           '<p style="margin-bottom:6px;">' +
-            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elements, leituras de medidores e o acervo fotográfico constante neste laudo para os ambientes e itens <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
+            'Por estarem as partes cientes e de pleno acordo com as constatações técnicas, tabelas periciais de elementos, leituras de medidores e o acervo fotográfico constante neste laudo para os ambientes e itens <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento, referente à VISTORIA DE ' + tipoVistoria.toUpperCase() + ', passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign para todos os efeitos de direito.' +
           '</p>' +
           '<p style="margin-bottom:6px;">' +
             'E, por estarem, assim, justos e contratados, assinam fisicamente ou de forma digital, por meio de assinatura eletrônica que atende aos requisitos da Lei nº 14.063/2020, a qual regulamenta e reconhece a validade jurídica das assinaturas eletrônicas.' +
