@@ -667,46 +667,59 @@
       return;
     }
 
-    currentVistoriadorEmail = user.email;
+    currentVistoriadorEmail = user.email || "Não identificado";
     authOverlay.style.display = 'none';
     userBar.style.display = 'flex';
-    userDisplayEmail.innerText = user.email;
+    if (userDisplayEmail) userDisplayEmail.innerText = currentVistoriadorEmail;
 
-    const { data, error } = await supabaseClient
-      .from('profiles')
-      .select('subscription_status, subscription_expires_at, role')
-      .eq('id', user.id)
-      .single();
-
-    if (data && data.role === 'admin') {
+    // Administrador directo ou email do proprietário
+    if (user.email === 'chalfouncorretor@gmail.com') {
       subBarrierOverlay.style.display = 'none';
       if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso VIP';
       return;
     }
 
-    const agora = new Date();
-    const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
-    const isAtivoValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
+    try {
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('subscription_status, subscription_expires_at, role')
+        .eq('id', user.id)
+        .maybeSingle();
 
-    if (data && data.role === 'manutencao') {
-      if (isAtivoValido) {
+      if (data && data.role === 'admin') {
+        subBarrierOverlay.style.display = 'none';
+        if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso VIP';
+        return;
+      }
+
+      const agora = new Date();
+      const expiresAt = data?.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
+      const isAtivoValido = data && data.subscription_status === 'ativo' && expiresAt && agora < expiresAt;
+
+      if (data && data.role === 'manutencao') {
+        if (isAtivoValido) {
+          subBarrierOverlay.style.display = 'none';
+          const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção até ' + horaFormatada;
+        } else {
+          subBarrierOverlay.style.display = 'flex';
+          if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção Expirada';
+        }
+        return;
+      }
+
+      if (error || !isAtivoValido) {
+        subBarrierOverlay.style.display = 'flex';
+        if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso Bloqueado';
+      } else {
         subBarrierOverlay.style.display = 'none';
         const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção até ' + horaFormatada;
-      } else {
-        subBarrierOverlay.style.display = 'flex';
-        if (userExpiresBadge) userExpiresBadge.innerText = 'Manutenção Expirada';
+        if (userExpiresBadge) userExpiresBadge.innerText = 'Válido até ' + horaFormatada;
       }
-      return;
-    }
-
-    if (error || !isAtivoValido) {
-      subBarrierOverlay.style.display = 'flex';
-      if (userExpiresBadge) userExpiresBadge.innerText = 'Acesso Bloqueado';
-    } else {
+    } catch (e) {
+      console.warn("Erro ao verificar tabela profiles, concedendo acesso da sessão:", e);
       subBarrierOverlay.style.display = 'none';
-      const horaFormatada = expiresAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      if (userExpiresBadge) userExpiresBadge.innerText = 'Válido até ' + horaFormatada;
+      if (userExpiresBadge) userExpiresBadge.innerText = 'Conectado';
     }
   }
 
@@ -722,13 +735,18 @@
       return;
     }
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error) {
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        authMsg.className = 'auth-status-msg auth-status-err';
+        authMsg.innerText = 'Erro: ' + error.message;
+      } else if (data && data.user) {
+        authMsg.innerText = '';
+        await checkUserSubscription(data.user);
+      }
+    } catch (err) {
       authMsg.className = 'auth-status-msg auth-status-err';
-      authMsg.innerText = 'Erro: ' + error.message;
-    } else {
-      authMsg.innerText = '';
-      checkUserSubscription(data.user);
+      authMsg.innerText = 'Erro de rede ou autenticação: ' + err.message;
     }
   }
 
@@ -744,14 +762,19 @@
       return;
     }
 
-    const { data, error } = await supabaseClient.auth.signUp({ email, password });
-    if (error) {
+    try {
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) {
+        authMsg.className = 'auth-status-msg auth-status-err';
+        authMsg.innerText = 'Erro: ' + error.message;
+      } else if (data && data.user) {
+        authMsg.className = 'auth-status-msg auth-status-ok';
+        authMsg.innerText = 'Conta criada com sucesso!';
+        await checkUserSubscription(data.user);
+      }
+    } catch (err) {
       authMsg.className = 'auth-status-msg auth-status-err';
-      authMsg.innerText = 'Erro: ' + error.message;
-    } else {
-      authMsg.className = 'auth-status-msg auth-status-ok';
-      authMsg.innerText = 'Conta criada com sucesso!';
-      checkUserSubscription(data.user);
+      authMsg.innerText = 'Erro ao cadastrar: ' + err.message;
     }
   }
 
@@ -781,6 +804,14 @@
     await supabaseClient.auth.signOut();
     window.location.reload();
   }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session && session.user) {
+      checkUserSubscription(session.user);
+    } else {
+      checkUserSubscription(null);
+    }
+  });
 
   supabaseClient.auth.getSession().then(({ data: { session } }) => {
     checkUserSubscription(session?.user || null);
@@ -904,10 +935,7 @@
       if (aiSucesso && document.getElementById('locador').value && document.getElementById('locatario').value) {
         statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e auditado via Inteligência Artificial!</span>';
       } else {
-        // Se a IA não preencheu tudo, roda a extração direta das cláusulas e do log Clicksign
         runContractExtractionV17(allRawLines, page1RawLines, textoInteiro);
-
-        // Se ainda faltar campos, tenta parâmetros de tags ou [MIC_DADOS]
         runMicDadosExtraction(textoInteiro);
 
         if (document.getElementById('locador').value || document.getElementById('locatario').value) {
@@ -1894,4 +1922,25 @@
   }
 
   function downloadPdfDirect() {
-    if
+    if (!generatedPdfBlob) return;
+    var url = URL.createObjectURL(generatedPdfBlob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = generatedPdfFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js');
+    });
+  }
+</script>
+
+</body>
+</html>
