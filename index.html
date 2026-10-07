@@ -459,7 +459,7 @@
         <div class="progress-bar-container">
           <div id="parseProgressFill" class="progress-bar-fill"></div>
         </div>
-        <div id="parseLoaderMsg" style="font-size:0.85rem; font-weight:600; color:#007bff;">Fazendo leitura direta do contrato...</div>
+        <div id="parseLoaderMsg" style="font-size:0.85rem; font-weight:600; color:#007bff;">Fazendo leitura direta do contrato com IA...</div>
       </div>
       <div id="statusNoticeArea" style="margin-top:4px;"></div>
 
@@ -866,7 +866,6 @@
       
       var allRawLines = [];
       var page1RawLines = [];
-      var page10RawLines = [];
 
       for (var p = 1; p <= pdf.numPages; p++) {
         var page = await pdf.getPage(p);
@@ -876,12 +875,11 @@
           if (str && str.trim().length > 0) {
             allRawLines.push(str.trim());
             if (p === 1) page1RawLines.push(str.trim());
-            if (p === 10) page10RawLines.push(str.trim());
           }
         }
       }
 
-      progressFill.style.width = '70%';
+      progressFill.style.width = '65%';
       var textoInteiro = allRawLines.join(" ");
 
       // Captura Hash / UUID Clicksign
@@ -891,39 +889,31 @@
         highlightField('numContrato');
       }
 
-      // Captura de Link do Drive nas páginas finais ou no texto inteiro
+      // Captura Link do Drive / Fotos
       var linkDrive = textoInteiro.match(/https?:\/\/(?:drive\.google\.com|onedrive\.live\.com|1drv\.ms|dropbox\.com)[^\s"'>]+/i);
       if (linkDrive) {
         document.getElementById('linkFotosHD').value = linkDrive[0];
         highlightField('linkFotosHD');
       }
 
-      var temBlocoMic = /\[\s*MIC_DADOS\s*\]/i.test(textoInteiro);
-      var aplicouTudo = false;
+      // MOTOR DE CAPTURA COM LEITURA PRIMÁRIA POR IA
+      progressFill.style.width = '80%';
+      var amostraTexto = page1RawLines.join("\n") + "\n\n" + allRawLines.slice(0, 150).join(" ");
+      var aiSucesso = await tryAiContractParsing(amostraTexto);
 
-      // 1. TENTATIVA POR BLOCO [MIC_DADOS]
-      if (temBlocoMic) {
-        aplicouTudo = runMicDadosExtraction(textoInteiro);
-        if (aplicouTudo) {
-          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Dados oficiais do bloco [MIC_DADOS] aplicados com sucesso!</span>';
-        }
-      }
-
-      // 2. SE NÃO TEM OU FALHOU [MIC_DADOS], TENTA EXTRAÇÃO DIRETA POR IA
-      if (!aplicouTudo) {
-        progressFill.style.width = '85%';
-        var aiSucesso = await tryAiContractParsing(page1RawLines.join("\n") + "\n\n" + allRawLines.slice(0, 150).join(" "));
-        if (aiSucesso) {
-          aplicouTudo = true;
-          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e auditado via Inteligência Artificial!</span>';
-        }
-      }
-
-      // 3. FALLBACK: MOTOR REGEX ROBUSTO V17 (PÁGINA 1 + LOG DE ASSINATURAS CLICKSIGN)
-      if (!aplicouTudo || !document.getElementById('locador').value || !document.getElementById('locatario').value) {
+      if (aiSucesso && document.getElementById('locador').value && document.getElementById('locatario').value) {
+        statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e auditado via Inteligência Artificial!</span>';
+      } else {
+        // Se a IA não preencheu tudo, roda a extração direta das cláusulas e do log Clicksign
         runContractExtractionV17(allRawLines, page1RawLines, textoInteiro);
-        if (!statusArea.innerHTML) {
-          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Dados cadastrais e cláusulas extraídos diretamente do PDF!</span>';
+
+        // Se ainda faltar campos, tenta parâmetros de tags ou [MIC_DADOS]
+        runMicDadosExtraction(textoInteiro);
+
+        if (document.getElementById('locador').value || document.getElementById('locatario').value) {
+          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido diretamente com sucesso!</span>';
+        } else {
+          statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Aviso: Verifique os campos cadastrais abaixo.</span>';
         }
       }
 
@@ -946,47 +936,54 @@
       });
       if (!res.ok) return false;
       var data = await res.json();
-      if (!data || !data.locador) return false;
+      if (!data) return false;
 
+      var achou = false;
       if (data.locador && !document.getElementById('locador').value) {
         document.getElementById('locador').value = data.locador;
         highlightField('locador');
+        achou = true;
       }
       if (data.locatario && !document.getElementById('locatario').value) {
         document.getElementById('locatario').value = data.locatario;
         highlightField('locatario');
+        achou = true;
       }
       if (data.imovel && !document.getElementById('imovel').value) {
         document.getElementById('imovel').value = decodeAddressOnly(data.imovel);
         highlightField('imovel');
+        achou = true;
       }
       if (data.dataInicio && !document.getElementById('dataInicio').value) {
         document.getElementById('dataInicio').value = toIsoDate(data.dataInicio);
         highlightField('dataInicio');
+        achou = true;
       }
       if (data.dataTermino && !document.getElementById('dataTermino').value) {
         document.getElementById('dataTermino').value = toIsoDate(data.dataTermino);
         highlightField('dataTermino');
+        achou = true;
       }
-      return true;
+      if (data.numContrato && !document.getElementById('numContrato').value) {
+        document.getElementById('numContrato').value = data.numContrato;
+        highlightField('numContrato');
+      }
+      if (data.linkFotos && !document.getElementById('linkFotosHD').value) {
+        document.getElementById('linkFotosHD').value = data.linkFotos;
+        highlightField('linkFotosHD');
+      }
+      return achou;
     } catch (e) {
-      console.warn("Falha no parse por IA, caindo no parser local regex:", e);
+      console.warn("Falha no parse via IA:", e);
       return false;
     }
   }
 
   function runMicDadosExtraction(textoInteiro) {
-    var blocoMatch = textoInteiro.match(/\[\s*MIC_DADOS\s*\]([\s\S]*?)\[\s*\/\s*MIC_DADOS\s*\]/i);
-    if (!blocoMatch) return false;
-
-    var bloco = blocoMatch[1];
     function capturarCampo(nomeCampo) {
-      var regex = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:]?\\s*\\}[:\\s-]*([^{]+)', 'i');
-      var match = bloco.match(regex);
-      if (match && match[1]) return match[1].replace(/\s+/g, " ").trim();
-      var regexInside = new RegExp('\\{\\s*' + nomeCampo + '\\s*[:=]\\s*([^}]+)\\}', 'i');
-      var matchInside = bloco.match(regexInside);
-      if (matchInside && matchInside[1]) return matchInside[1].replace(/\s+/g, " ").trim();
+      var regex = new RegExp('(?:\\{' + nomeCampo + '\\}[:\\s-]*|\\{' + nomeCampo + '[:=])([^{}\\]\\n\\r]+)', 'i');
+      var match = textoInteiro.match(regex);
+      if (match && match[1]) return match[1].replace(/\}|\].*$/g, '').replace(/\s+/g, ' ').trim();
       return "";
     }
 
@@ -998,20 +995,20 @@
     var linkInfo = capturarCampo("link") || capturarCampo("LinkFotos");
 
     var aplicou = false;
-    if (proprietario) { document.getElementById('locador').value = sanitizePdfSpaces(proprietario); highlightField('locador'); aplicou = true; }
-    if (inquilino) { document.getElementById('locatario').value = sanitizePdfSpaces(inquilino); highlightField('locatario'); aplicou = true; }
-    if (endereco) { document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(endereco)); highlightField('imovel'); aplicou = true; }
-    if (dataInicio) {
+    if (proprietario && !document.getElementById('locador').value) { document.getElementById('locador').value = sanitizePdfSpaces(proprietario); highlightField('locador'); aplicou = true; }
+    if (inquilino && !document.getElementById('locatario').value) { document.getElementById('locatario').value = sanitizePdfSpaces(inquilino); highlightField('locatario'); aplicou = true; }
+    if (endereco && !document.getElementById('imovel').value) { document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(endereco)); highlightField('imovel'); aplicou = true; }
+    if (dataInicio && !document.getElementById('dataInicio').value) {
       var isoIni = toIsoDate(dataInicio);
       if (isoIni) { document.getElementById('dataInicio').value = isoIni; highlightField('dataInicio'); aplicou = true; }
     }
-    if (dataFim) {
+    if (dataFim && !document.getElementById('dataTermino').value) {
       var isoFim = toIsoDate(dataFim);
       if (isoFim) { document.getElementById('dataTermino').value = isoFim; highlightField('dataTermino'); aplicou = true; }
     }
-    if (linkInfo) {
+    if (linkInfo && !document.getElementById('linkFotosHD').value) {
       document.getElementById('linkFotosHD').value = linkInfo;
-      if (linkInfo !== "") highlightField('linkFotosHD');
+      highlightField('linkFotosHD');
       aplicou = true;
     }
     return aplicou;
@@ -1035,72 +1032,80 @@
     var page1Text = page1Lines.join(" ");
 
     // LOCADOR
-    var locador = "";
-    var mLoc1 = page1Text.match(/LOCADOR(?:\(A\))?\s*:\s*([^,;]+)/i);
-    if (mLoc1 && isValidPersonName(mLoc1[1])) {
-      locador = cleanName(mLoc1[1]);
-    }
-    if (!locador) {
-      var mLocSign = textoCompleto.match(/([A-ZÀ-Úa-zà-ú\s]{4,40})\s+(?:CPF[^\n]+)?assinou como locador/i);
-      if (mLocSign && isValidPersonName(mLocSign[1])) locador = cleanName(mLocSign[1]);
-    }
-    if (locador) {
-      document.getElementById('locador').value = sanitizePdfSpaces(locador);
-      highlightField('locador');
+    if (!document.getElementById('locador').value) {
+      var locador = "";
+      var mLoc1 = page1Text.match(/LOCADOR(?:\(A\))?\s*:\s*([^,;\n]+)/i);
+      if (mLoc1 && isValidPersonName(mLoc1[1])) {
+        locador = cleanName(mLoc1[1]);
+      }
+      if (!locador) {
+        var mLocSign = textoCompleto.match(/([A-ZÀ-Úa-zà-ú\s]{4,40})\s+(?:CPF[^\n]+)?assinou como locador/i);
+        if (mLocSign && isValidPersonName(mLocSign[1])) locador = cleanName(mLocSign[1]);
+      }
+      if (locador) {
+        document.getElementById('locador').value = sanitizePdfSpaces(locador);
+        highlightField('locador');
+      }
     }
 
     // LOCATÁRIO
-    var locatario = "";
-    var mLocat1 = page1Text.match(/LOCAT[AÁ]RIO(?:\(A\))?\s*:\s*([^,;]+)/i);
-    if (mLocat1 && isValidPersonName(mLocat1[1])) {
-      locatario = cleanName(mLocat1[1]);
-    }
-    if (!locatario) {
-      var mLocatSign = textoCompleto.match(/([A-ZÀ-Úa-zà-ú\s]{4,40})\s+(?:CPF[^\n]+)?assinou como locat[aá]rio/i);
-      if (mLocatSign && isValidPersonName(mLocatSign[1])) locatario = cleanName(mLocatSign[1]);
-    }
-    if (locatario) {
-      document.getElementById('locatario').value = sanitizePdfSpaces(locatario);
-      highlightField('locatario');
+    if (!document.getElementById('locatario').value) {
+      var locatario = "";
+      var mLocat1 = page1Text.match(/LOCAT[AÁ]RIO(?:\(A\))?\s*:\s*([^,;\n]+)/i);
+      if (mLocat1 && isValidPersonName(mLocat1[1])) {
+        locatario = cleanName(mLocat1[1]);
+      }
+      if (!locatario) {
+        var mLocatSign = textoCompleto.match(/([A-ZÀ-Úa-zà-ú\s]{4,40})\s+(?:CPF[^\n]+)?assinou como locat[aá]rio/i);
+        if (mLocatSign && isValidPersonName(mLocatSign[1])) locatario = cleanName(mLocatSign[1]);
+      }
+      if (locatario) {
+        document.getElementById('locatario').value = sanitizePdfSpaces(locatario);
+        highlightField('locatario');
+      }
     }
 
     // IMÓVEL / ENDEREÇO
-    var imovel = "";
-    var mImov = page1Text.match(/IM[OÓ]VEL\s*:\s*([^\.]+?)(?=\.\s*As\s+partes|\.\s*CL[AÁ]USULA|$)/i);
-    if (mImov && mImov[1]) {
-      var candidate = mImov[1].trim();
-      var idxSituado = candidate.toLowerCase().indexOf("situado na ");
-      if (idxSituado !== -1) {
-        candidate = candidate.substring(idxSituado + 11).trim();
-      } else {
-        var idxNa = candidate.toLowerCase().indexOf("situado a ");
-        if (idxNa !== -1) candidate = candidate.substring(idxNa + 10).trim();
+    if (!document.getElementById('imovel').value) {
+      var imovel = "";
+      var mImov = page1Text.match(/IM[OÓ]VEL\s*:\s*([^\.]+?)(?=\.\s*As\s+partes|\.\s*CL[AÁ]USULA|$)/i);
+      if (mImov && mImov[1]) {
+        var candidate = mImov[1].trim();
+        var idxSituado = candidate.toLowerCase().indexOf("situado na ");
+        if (idxSituado !== -1) {
+          candidate = candidate.substring(idxSituado + 11).trim();
+        } else {
+          var idxNa = candidate.toLowerCase().indexOf("situado a ");
+          if (idxNa !== -1) candidate = candidate.substring(idxNa + 10).trim();
+        }
+        imovel = candidate;
       }
-      imovel = candidate;
-    }
-    if (!imovel) {
-      var addressRaw = extractAddressAfterSituado(page1Text);
-      if (addressRaw) imovel = addressRaw;
-    }
-    if (imovel) {
-      document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(imovel));
-      highlightField('imovel');
+      if (!imovel) {
+        var addressRaw = extractAddressAfterSituado(page1Text);
+        if (addressRaw) imovel = addressRaw;
+      }
+      if (imovel) {
+        document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(imovel));
+        highlightField('imovel');
+      }
     }
 
-    // DATAS DE VIGÊNCIA (CLÁUSULA PRIMEIRA OU QUALQUER TRECHO)
-    var mDatas = textoCompleto.match(/in[ií]cio\s+em\s+(\d{1,2}\/\d{1,2}\/\d{4}).*?at[eé]\s+(?:a\s+Data\s+Final\s+do\s+Contrato\s+em\s+)?(\d{1,2}\/\d{1,2}\/\d{4})/i);
-    if (mDatas) {
-      document.getElementById('dataInicio').value = toIsoDate(mDatas[1]);
-      document.getElementById('dataTermino').value = toIsoDate(mDatas[2]);
-      highlightField('dataInicio');
-      highlightField('dataTermino');
-    } else {
-      var dateMatches = page1Text.match(/\b\d{2}\/\d{2}\/\d{4}\b/g);
-      if (dateMatches && dateMatches.length >= 2) {
-        document.getElementById('dataInicio').value = toIsoDate(dateMatches[0]);
-        document.getElementById('dataTermino').value = toIsoDate(dateMatches[1]);
+    // DATAS DE VIGÊNCIA
+    if (!document.getElementById('dataInicio').value || !document.getElementById('dataTermino').value) {
+      var mDatas = textoCompleto.match(/in[ií]cio\s+em\s+(\d{1,2}\/\d{1,2}\/\d{4}).*?at[eé]\s+(?:a\s+Data\s+Final\s+do\s+Contrato\s+em\s+)?(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (mDatas) {
+        document.getElementById('dataInicio').value = toIsoDate(mDatas[1]);
+        document.getElementById('dataTermino').value = toIsoDate(mDatas[2]);
         highlightField('dataInicio');
         highlightField('dataTermino');
+      } else {
+        var dateMatches = page1Text.match(/\b\d{2}\/\d{2}\/\d{4}\b/g);
+        if (dateMatches && dateMatches.length >= 2) {
+          document.getElementById('dataInicio').value = toIsoDate(dateMatches[0]);
+          document.getElementById('dataTermino').value = toIsoDate(dateMatches[1]);
+          highlightField('dataInicio');
+          highlightField('dataTermino');
+        }
       }
     }
   }
@@ -1889,25 +1894,4 @@
   }
 
   function downloadPdfDirect() {
-    if (!generatedPdfBlob) return;
-    var url = URL.createObjectURL(generatedPdfBlob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = generatedPdfFileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-</script>
-
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js');
-    });
-  }
-</script>
-
-</body>
-</html>
+    if
