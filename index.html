@@ -848,7 +848,7 @@
     var statusArea = document.getElementById('statusNoticeArea');
     
     loader.style.display = 'block';
-    progressFill.style.width = '30%';
+    progressFill.style.width = '20%';
     statusArea.innerHTML = '';
 
     document.getElementById('locador').value = '';
@@ -861,11 +861,12 @@
 
     try {
       var arrayBuffer = await file.arrayBuffer();
-      progressFill.style.width = '60%';
+      progressFill.style.width = '45%';
       var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       
       var allRawLines = [];
       var page1RawLines = [];
+      var page10RawLines = [];
 
       for (var p = 1; p <= pdf.numPages; p++) {
         var page = await pdf.getPage(p);
@@ -875,31 +876,55 @@
           if (str && str.trim().length > 0) {
             allRawLines.push(str.trim());
             if (p === 1) page1RawLines.push(str.trim());
+            if (p === 10) page10RawLines.push(str.trim());
           }
         }
       }
 
-      progressFill.style.width = '90%';
+      progressFill.style.width = '70%';
       var textoInteiro = allRawLines.join(" ");
 
+      // Captura Hash / UUID Clicksign
       var mUuid = textoInteiro.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
       if (mUuid) {
         document.getElementById('numContrato').value = mUuid[1];
         highlightField('numContrato');
       }
 
-      var temBlocoMic = /\[\s*MIC_DADOS\s*\]/i.test(textoInteiro);
+      // Captura de Link do Drive nas páginas finais ou no texto inteiro
+      var linkDrive = textoInteiro.match(/https?:\/\/(?:drive\.google\.com|onedrive\.live\.com|1drv\.ms|dropbox\.com)[^\s"'>]+/i);
+      if (linkDrive) {
+        document.getElementById('linkFotosHD').value = linkDrive[0];
+        highlightField('linkFotosHD');
+      }
 
+      var temBlocoMic = /\[\s*MIC_DADOS\s*\]/i.test(textoInteiro);
+      var aplicouTudo = false;
+
+      // 1. TENTATIVA POR BLOCO [MIC_DADOS]
       if (temBlocoMic) {
-        var usouMicDados = runMicDadosExtraction(textoInteiro);
-        if (usouMicDados) {
-          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido — dados oficiais do bloco [MIC_DADOS] aplicados.</span>';
-        } else {
-          statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Aviso: Bloco [MIC_DADOS] encontrado, mas os parâmetros não puderam ser lidos.</span>';
+        aplicouTudo = runMicDadosExtraction(textoInteiro);
+        if (aplicouTudo) {
+          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Dados oficiais do bloco [MIC_DADOS] aplicados com sucesso!</span>';
         }
-      } else {
-        runContractExtractionV16(allRawLines, page1RawLines);
-        statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Contrato lido via leitura alternativa do PDF.</span>';
+      }
+
+      // 2. SE NÃO TEM OU FALHOU [MIC_DADOS], TENTA EXTRAÇÃO DIRETA POR IA
+      if (!aplicouTudo) {
+        progressFill.style.width = '85%';
+        var aiSucesso = await tryAiContractParsing(page1RawLines.join("\n") + "\n\n" + allRawLines.slice(0, 150).join(" "));
+        if (aiSucesso) {
+          aplicouTudo = true;
+          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e auditado via Inteligência Artificial!</span>';
+        }
+      }
+
+      // 3. FALLBACK: MOTOR REGEX ROBUSTO V17 (PÁGINA 1 + LOG DE ASSINATURAS CLICKSIGN)
+      if (!aplicouTudo || !document.getElementById('locador').value || !document.getElementById('locatario').value) {
+        runContractExtractionV17(allRawLines, page1RawLines, textoInteiro);
+        if (!statusArea.innerHTML) {
+          statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Dados cadastrais e cláusulas extraídos diretamente do PDF!</span>';
+        }
       }
 
       progressFill.style.width = '100%';
@@ -911,6 +936,44 @@
       setTimeout(() => { loader.style.display = 'none'; }, 600);
     }
   });
+
+  async function tryAiContractParsing(contractSnippet) {
+    try {
+      var res = await fetch('/api/parse-contract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contractText: contractSnippet })
+      });
+      if (!res.ok) return false;
+      var data = await res.json();
+      if (!data || !data.locador) return false;
+
+      if (data.locador && !document.getElementById('locador').value) {
+        document.getElementById('locador').value = data.locador;
+        highlightField('locador');
+      }
+      if (data.locatario && !document.getElementById('locatario').value) {
+        document.getElementById('locatario').value = data.locatario;
+        highlightField('locatario');
+      }
+      if (data.imovel && !document.getElementById('imovel').value) {
+        document.getElementById('imovel').value = decodeAddressOnly(data.imovel);
+        highlightField('imovel');
+      }
+      if (data.dataInicio && !document.getElementById('dataInicio').value) {
+        document.getElementById('dataInicio').value = toIsoDate(data.dataInicio);
+        highlightField('dataInicio');
+      }
+      if (data.dataTermino && !document.getElementById('dataTermino').value) {
+        document.getElementById('dataTermino').value = toIsoDate(data.dataTermino);
+        highlightField('dataTermino');
+      }
+      return true;
+    } catch (e) {
+      console.warn("Falha no parse por IA, caindo no parser local regex:", e);
+      return false;
+    }
+  }
 
   function runMicDadosExtraction(textoInteiro) {
     var blocoMatch = textoInteiro.match(/\[\s*MIC_DADOS\s*\]([\s\S]*?)\[\s*\/\s*MIC_DADOS\s*\]/i);
@@ -955,7 +1018,8 @@
   }
 
   function toIsoDate(d) {
-    var str = (d || '').replace(/\s+/g, '');
+    if (!d) return '';
+    var str = String(d).replace(/\s+/g, '');
     var m = str.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
     if (m) {
       var ano = m[3].length === 2 ? '20' + m[3] : m[3];
@@ -967,52 +1031,78 @@
     return '';
   }
 
-  function runContractExtractionV16(allLines, page1Lines) {
+  function runContractExtractionV17(allLines, page1Lines, textoCompleto) {
     var page1Text = page1Lines.join(" ");
-    var locadorEncontrado = "";
-    var mLoc1 = page1Text.match(/LOCADOR(?:A)?\s*\(?\s*A\s*\)?\s*[:\-–]?\s*([^,;\n]+)/i);
-    if (mLoc1 && isValidPersonName(mLoc1[1])) locadorEncontrado = cleanName(mLoc1[1]);
-    if (!locadorEncontrado) {
-      for (var i = 0; i < allLines.length; i++) {
-        if (cleanSearch(allLines[i]).indexOf("assinou como locador") !== -1) {
-          locadorEncontrado = findTrueSignerAbove(allLines, i);
-          if (locadorEncontrado) break;
-        }
-      }
+
+    // LOCADOR
+    var locador = "";
+    var mLoc1 = page1Text.match(/LOCADOR(?:\(A\))?\s*:\s*([^,;]+)/i);
+    if (mLoc1 && isValidPersonName(mLoc1[1])) {
+      locador = cleanName(mLoc1[1]);
     }
-    if (locadorEncontrado) { document.getElementById('locador').value = sanitizePdfSpaces(locadorEncontrado); highlightField('locador'); }
-
-    var locatarioEncontrado = "";
-    var mLocat1 = page1Text.match(/LOCAT[AÁ]RIO(?:A)?\s*\(?\s*A\s*\)?\s*[:\-–]?\s*([^,;\n]+)/i);
-    if (mLocat1 && isValidPersonName(mLocat1[1])) locatarioEncontrado = cleanName(mLocat1[1]);
-    if (!locatarioEncontrado) {
-      for (var j = 0; j < allLines.length; j++) {
-        if (cleanSearch(allLines[j]).indexOf("assinou como locatario") !== -1) {
-          locatarioEncontrado = findTrueSignerAbove(allLines, j);
-          if (locatarioEncontrado) break;
-        }
-      }
+    if (!locador) {
+      var mLocSign = textoCompleto.match(/([A-ZÀ-Úa-zà-ú\s]{4,40})\s+(?:CPF[^\n]+)?assinou como locador/i);
+      if (mLocSign && isValidPersonName(mLocSign[1])) locador = cleanName(mLocSign[1]);
     }
-    if (locatarioEncontrado) { document.getElementById('locatario').value = sanitizePdfSpaces(locatarioEncontrado); highlightField('locatario'); }
+    if (locador) {
+      document.getElementById('locador').value = sanitizePdfSpaces(locador);
+      highlightField('locador');
+    }
 
-    var addressRaw = extractAddressAfterSituado(page1Text);
-    if (addressRaw) { document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(addressRaw)); highlightField('imovel'); }
+    // LOCATÁRIO
+    var locatario = "";
+    var mLocat1 = page1Text.match(/LOCAT[AÁ]RIO(?:\(A\))?\s*:\s*([^,;]+)/i);
+    if (mLocat1 && isValidPersonName(mLocat1[1])) {
+      locatario = cleanName(mLocat1[1]);
+    }
+    if (!locatario) {
+      var mLocatSign = textoCompleto.match(/([A-ZÀ-Úa-zà-ú\s]{4,40})\s+(?:CPF[^\n]+)?assinou como locat[aá]rio/i);
+      if (mLocatSign && isValidPersonName(mLocatSign[1])) locatario = cleanName(mLocatSign[1]);
+    }
+    if (locatario) {
+      document.getElementById('locatario').value = sanitizePdfSpaces(locatario);
+      highlightField('locatario');
+    }
 
-    var dateMatches = page1Text.match(/\b\d{2}\/\d{2}\/\d{4}\b/g);
-    if (dateMatches && dateMatches.length >= 2) {
-      document.getElementById('dataInicio').value = toIsoDate(dateMatches[0]);
-      document.getElementById('dataTermino').value = toIsoDate(dateMatches[1]);
+    // IMÓVEL / ENDEREÇO
+    var imovel = "";
+    var mImov = page1Text.match(/IM[OÓ]VEL\s*:\s*([^\.]+?)(?=\.\s*As\s+partes|\.\s*CL[AÁ]USULA|$)/i);
+    if (mImov && mImov[1]) {
+      var candidate = mImov[1].trim();
+      var idxSituado = candidate.toLowerCase().indexOf("situado na ");
+      if (idxSituado !== -1) {
+        candidate = candidate.substring(idxSituado + 11).trim();
+      } else {
+        var idxNa = candidate.toLowerCase().indexOf("situado a ");
+        if (idxNa !== -1) candidate = candidate.substring(idxNa + 10).trim();
+      }
+      imovel = candidate;
+    }
+    if (!imovel) {
+      var addressRaw = extractAddressAfterSituado(page1Text);
+      if (addressRaw) imovel = addressRaw;
+    }
+    if (imovel) {
+      document.getElementById('imovel').value = decodeAddressOnly(sanitizePdfSpaces(imovel));
+      highlightField('imovel');
+    }
+
+    // DATAS DE VIGÊNCIA (CLÁUSULA PRIMEIRA OU QUALQUER TRECHO)
+    var mDatas = textoCompleto.match(/in[ií]cio\s+em\s+(\d{1,2}\/\d{1,2}\/\d{4}).*?at[eé]\s+(?:a\s+Data\s+Final\s+do\s+Contrato\s+em\s+)?(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    if (mDatas) {
+      document.getElementById('dataInicio').value = toIsoDate(mDatas[1]);
+      document.getElementById('dataTermino').value = toIsoDate(mDatas[2]);
       highlightField('dataInicio');
       highlightField('dataTermino');
+    } else {
+      var dateMatches = page1Text.match(/\b\d{2}\/\d{2}\/\d{4}\b/g);
+      if (dateMatches && dateMatches.length >= 2) {
+        document.getElementById('dataInicio').value = toIsoDate(dateMatches[0]);
+        document.getElementById('dataTermino').value = toIsoDate(dateMatches[1]);
+        highlightField('dataInicio');
+        highlightField('dataTermino');
+      }
     }
-  }
-
-  function findTrueSignerAbove(lines, index) {
-    for (var j = index - 1; j >= Math.max(0, index - 8); j--) {
-      var candidate = lines[j].trim();
-      if (isValidPersonName(candidate)) return cleanName(candidate);
-    }
-    return "";
   }
 
   function extractAddressAfterSituado(text) {
@@ -1260,7 +1350,6 @@
     roomsData[room].unavailable = false;
     roomsData[room].photos.push(dataUrl);
 
-    // Feedback visual do clique
     videoFeed.style.opacity = '0.3';
     setTimeout(() => { videoFeed.style.opacity = '1'; }, 100);
 
@@ -1468,7 +1557,6 @@
     var totalPages = normalRooms.length + (specialRooms.length > 0 ? 1 : 0) + 1;
     var pageNum = 1;
 
-    // 1. CÔMODOS NORMAIS (COM ENQUADRAMENTO PROPORCIONAL ANTI-ESTOURO)
     normalRooms.forEach(function(roomName, idx) {
       var data = roomsData[roomName];
       var ai = data.aiAnalysis;
@@ -1531,7 +1619,6 @@
             '</thead>' +
             '<tbody>';
 
-      // Limita a renderização aos 4 principais elementos se houver muitas fotos, mantendo a folha pericial estável
       var maxEls = isDense ? 4 : ai.elementos.length;
       for (var eIdx = 0; eIdx < Math.min(ai.elementos.length, maxEls); eIdx++) {
         var el = ai.elementos[eIdx];
@@ -1595,7 +1682,6 @@
       pageNum++;
     });
 
-    // 2. ITENS TÉCNICOS ESPECIAIS & MEDIDORES
     if (specialRooms.length > 0) {
       var specialPage = document.createElement('div');
       specialPage.className = 'laudo-page';
@@ -1680,7 +1766,6 @@
       pageNum++;
     }
 
-    // 3. ENCERRAMENTO E OBSERVAÇÕES
     var finalPage = document.createElement('div');
     finalPage.className = 'laudo-page';
 
