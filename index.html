@@ -542,6 +542,7 @@
       <div class="checkbox-grid" id="specialRoomsGrid">
         <label class="checkbox-card special-room"><input type="checkbox" value="Relógio de luz" checked> ⚡ Relógio de luz</label>
         <label class="checkbox-card special-room"><input type="checkbox" value="Medidor de Gás" checked> 🔥 Medidor de Gás</label>
+        <label class="checkbox-card special-room"><input type="checkbox" value="Hidrômetro" checked> 💧 Hidrômetro</label>
         <label class="checkbox-card special-room"><input type="checkbox" value="Chaves" checked> 🔑 Chaves do Imóvel</label>
       </div>
 
@@ -1180,7 +1181,7 @@
 
   function isSpecialItem(roomName) {
     var r = cleanSearch(roomName);
-    return (r.indexOf("luz") !== -1 || r.indexOf("gas") !== -1 || r.indexOf("chaves") !== -1);
+    return (r.indexOf("luz") !== -1 || r.indexOf("gas") !== -1 || r.indexOf("hidrometro") !== -1 || r.indexOf("chaves") !== -1);
   }
 
   function getMinPhotosForRoom(roomName) {
@@ -1191,6 +1192,7 @@
     var r = cleanSearch(roomName);
     if (r.indexOf("relogio") !== -1 || r.indexOf("luz") !== -1) return "LUZ";
     if (r.indexOf("gas") !== -1) return "GAS";
+    if (r.indexOf("hidrometro") !== -1) return "AGU";
     if (r.indexOf("chaves") !== -1) return "CHV";
     if (r.indexOf("sala") !== -1) return "S";
     if (r.indexOf("banheiro") !== -1) return "B";
