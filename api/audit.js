@@ -77,68 +77,52 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     required: ["introducao", "elementos", "fotos", "ressalvas"]
   };
 
-  // ------------------------------------------------------------------
-  // DIVIDE AS FOTOS EM LOTES DE ATÉ 3 (limite do Groq / segurança)
-  // ------------------------------------------------------------------
-  const lotes = [];
-  const TAMANHO_LOTE = 3;
-  for (let i = 0; i < photosDataUrls.length; i += TAMANHO_LOTE) {
-    lotes.push(photosDataUrls.slice(i, i + TAMANHO_LOTE));
-  }
+try {
+    const erros = [];
 
-  const resultadosParciais = [];
-
-  try {
-    for (let idxLote = 0; idxLote < lotes.length; idxLote++) {
-      const lote = lotes[idxLote];
-      const promptLote = prompt + `\n\nESTE É O LOTE ${idxLote + 1} DE ${lotes.length}. Analise APENAS as ${lote.length} foto(s) deste lote.`;
-
-      let resultadoLote = null;
-      const errosLote = [];
-
-      // 1) Tenta OpenRouter (VISTORIA_OPEN_API_KEY) primeiro
-      if (vistoriaOpenApiKey) {
-        try {
-          resultadoLote = await chamarOpenRouter(vistoriaOpenApiKey, lote, promptLote, schema);
-        } catch (err) {
-          errosLote.push('OpenRouter: ' + err.message);
-        }
+    // 1) Tenta OpenRouter com todas as fotos do cômodo de uma vez
+    if (vistoriaOpenApiKey) {
+      try {
+        const resOpen = await chamarOpenRouter(vistoriaOpenApiKey, photosDataUrls, prompt, schema);
+        return res.status(200).json(unificarResultados([resOpen], photosDataUrls.length, roomName));
+      } catch (err) {
+        erros.push('OpenRouter: ' + err.message);
       }
-
-      // 2) Se OpenRouter falhar, tenta Gemini
-      if (!resultadoLote && geminiApiKey) {
-        try {
-          resultadoLote = await chamarGemini(geminiApiKey, lote, promptLote, schema);
-        } catch (err) {
-          errosLote.push('Gemini: ' + err.message);
-        }
-      }
-
-      // 3) Se Gemini falhar, tenta Groq
-      if (!resultadoLote && groqApiKey) {
-        try {
-          resultadoLote = await chamarGroq(groqApiKey, lote, promptLote, schema);
-        } catch (err) {
-          errosLote.push('Groq: ' + err.message);
-        }
-      }
-
-      if (!resultadoLote) {
-        return res.status(500).json({
-          error: `Nenhum provedor respondeu no lote ${idxLote + 1}/${lotes.length}.`,
-          details: errosLote
-        });
-      }
-
-      resultadosParciais.push(resultadoLote);
     }
 
-    // ------------------------------------------------------------------
-    // UNIFICA OS RESULTADOS DOS LOTES EM UM ÚNICO OBJETO
-    // ------------------------------------------------------------------
-    const resultadoFinal = unificarResultados(resultadosParciais, photosDataUrls.length, roomName);
+    // 2) Se OpenRouter falhar, tenta Gemini com todas as fotos de uma vez
+    if (geminiApiKey) {
+      try {
+        const resGemini = await chamarGemini(geminiApiKey, photosDataUrls, prompt, schema);
+        return res.status(200).json(unificarResultados([resGemini], photosDataUrls.length, roomName));
+      } catch (err) {
+        erros.push('Gemini: ' + err.message);
+      }
+    }
 
-    return res.status(200).json(resultadoFinal);
+    // 3) Se Gemini falhar, tenta Groq dividindo em lotes de até 3 fotos
+    if (groqApiKey) {
+      try {
+        const TAMANHO_LOTE = 3;
+        const resultadosParciais = [];
+        for (let i = 0; i < photosDataUrls.length; i += TAMANHO_LOTE) {
+          const lote = photosDataUrls.slice(i, i + TAMANHO_LOTE);
+          const idxLote = Math.floor(i / TAMANHO_LOTE) + 1;
+          const totalLotes = Math.ceil(photosDataUrls.length / TAMANHO_LOTE);
+          const promptLote = `${prompt}\n\nESTE É O LOTE ${idxLote} DE ${totalLotes}. Analise APENAS as ${lote.length} foto(s) deste lote.`;
+          const resGroq = await chamarGroq(groqApiKey, lote, promptLote, schema);
+          resultadosParciais.push(resGroq);
+        }
+        return res.status(200).json(unificarResultados(resultadosParciais, photosDataUrls.length, roomName));
+      } catch (err) {
+        erros.push('Groq: ' + err.message);
+      }
+    }
+
+    return res.status(500).json({
+      error: 'Nenhum provedor de IA respondeu com sucesso.',
+      details: erros
+    });
 
   } catch (error) {
     console.error('Falha no audit:', error);
@@ -150,27 +134,21 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
 // FUNÇÕES AUXILIARES
 // ============================================================================
 
-function dividirEmLotes(array, tamanho) {
-  const lotes = [];
-  for (let i = 0; i < array.length; i += tamanho) {
-    lotes.push(array.slice(i, i + tamanho));
-  }
-  return lotes;
-}
-
 function unificarResultados(resultadosParciais, totalFotos, roomName) {
   const introducoes = [];
   const todosElementos = [];
   const todasFotos = [];
   const ressalvas = [];
-
-  resultadosParciais.forEach((r, idx) => {
-    if (r.introducao) introducoes.push(`Lote ${idx + 1}: ${r.introducao}`);
+  
+resultadosParciais.forEach((r, idx) => {
+    if (r.introducao) {
+      introducoes.push(resultadosParciais.length > 1 ? `Lote ${idx + 1}: ${r.introducao}` : r.introducao);
+    }
     if (Array.isArray(r.elementos)) todosElementos.push(...r.elementos);
     if (Array.isArray(r.fotos)) todasFotos.push(...r.fotos);
     if (r.ressalvas) ressalvas.push(r.ressalvas);
   });
-
+  
   // Garante que o array de fotos tenha o tamanho correto
   while (todasFotos.length < totalFotos) {
     todasFotos.push({
@@ -198,9 +176,6 @@ function unificarResultados(resultadosParciais, totalFotos, roomName) {
 // OPENROUTER (VISTORIA_OPEN_API_KEY) — PROVEDOR PRINCIPAL
 // ============================================================================
 async function chamarOpenRouter(apiKey, photosDataUrls, prompt, schema) {
-  if (photosDataUrls.length > 3) {
-    throw new Error('OpenRouter aceita no máximo 3 imagens por request.');
-  }
 
   const content = [
     { type: "text", text: prompt + '\n\nResponda APENAS com um JSON válido, sem markdown, seguindo exatamente este schema: ' + JSON.stringify(schema) },
@@ -262,37 +237,12 @@ async function chamarGemini(geminiApiKey, photosDataUrls, prompt, schema) {
     }
   });
 
-  // Busca modelos disponíveis
-  let targetModels = [];
-  try {
-    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      if (Array.isArray(listData.models)) {
-        targetModels = listData.models
-          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-          .map(m => m.name.replace(/^models\//, ''));
-      }
-    }
-  } catch (_) {}
-
-  // Fallback fixo de modelos
-  if (!targetModels.length) {
-    targetModels = [
-      "gemini-2.0-flash",
-      "gemini-2.0-flash-lite",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b",
-      "gemini-1.5-pro"
-    ];
-  }
-
-  // Ordena: flash primeiro
-  targetModels.sort((a, b) => {
-    const af = a.includes('flash') ? 1 : 0;
-    const bf = b.includes('flash') ? 1 : 0;
-    return bf - af;
-  });
+  const targetModels = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash"
+  ];
 
   for (const model of targetModels) {
     try {
