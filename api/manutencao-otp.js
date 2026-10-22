@@ -22,22 +22,25 @@ export default async function handler(req, res) {
 
     const emailManutencao = 'manutencao@vistoriafacil.com';
 
-    // 3. Localiza ou cria o usuário diretamente via API REST de Admin do Supabase
-    const listUsersRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-      method: 'GET',
-      headers: {
-        'apikey': serviceKey,
-        'Authorization': `Bearer ${serviceKey}`
+    // 3. Consulta direta pelo e-mail na tabela profiles
+    const profileCheckRes = await fetch(
+      `${supabaseUrl}/rest/v1/profiles?email=eq.${encodeURIComponent(emailManutencao)}&select=id,email`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`
+        }
       }
-    });
+    );
 
-    if (!listUsersRes.ok) {
-      const errTxt = await listUsersRes.text();
-      return res.status(500).json({ error: 'Erro ao consultar usuários no Supabase', details: errTxt });
+    let maintenanceUser = null;
+    if (profileCheckRes.ok) {
+      const profiles = await profileCheckRes.json();
+      if (profiles.length > 0) {
+        maintenanceUser = { id: profiles[0].id, email: profiles[0].email };
+      }
     }
-
-    const { users } = await listUsersRes.json();
-    let maintenanceUser = users.find(u => u.email === emailManutencao);
 
     if (!maintenanceUser) {
       // Cria o usuário
