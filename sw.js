@@ -31,8 +31,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Estratégia "Network First": Tenta buscar a versão mais recente na Vercel. 
-  // Se falhar (sem internet), exibe a versão salva no cache.
+  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);
