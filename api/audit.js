@@ -93,11 +93,8 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     lotes.push(photosDataUrls.slice(i, i + TAMANHO_LOTE));
   }
 
-  const resultadosParciais = [];
-
   try {
-    for (let idxLote = 0; idxLote < lotes.length; idxLote++) {
-      const lote = lotes[idxLote];
+    const promessasLotes = lotes.map(async (lote, idxLote) => {
       const promptLote = prompt + `\n\nESTE É O LOTE ${idxLote + 1} DE ${lotes.length}. Analise APENAS as ${lote.length} foto(s) deste lote.`;
 
       let resultadoLote = null;
@@ -131,14 +128,13 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
       }
 
       if (!resultadoLote) {
-        return res.status(500).json({
-          error: `Nenhum provedor respondeu no lote ${idxLote + 1}/${lotes.length}.`,
-          details: errosLote
-        });
+        throw new Error(`Nenhum provedor respondeu no lote ${idxLote + 1}/${lotes.length}: ${errosLote.join(' | ')}`);
       }
 
-      resultadosParciais.push(resultadoLote);
-    }
+      return resultadoLote;
+    });
+
+    const resultadosParciais = await Promise.all(promessasLotes);
 
     // ------------------------------------------------------------------
     // UNIFICA OS RESULTADOS DOS LOTES EM UM ÚNICO OBJETO
