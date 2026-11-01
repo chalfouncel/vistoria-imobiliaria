@@ -328,6 +328,8 @@
   .table-inspection { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 6.2pt; background: rgba(255,255,255,0.9); }
   .table-inspection th { background: #fbf8f0; border: 1px solid #d4cbb5; padding: 2px 4px; text-align: left; font-weight: bold; color: #73570e; }
   .table-inspection td { border: 1px solid #ccc; padding: 2px 4px; vertical-align: top; line-height: 1.15; }
+  .table-inspection.table-compact { font-size: 5.5pt; margin-bottom: 3px; }
+  .table-inspection.table-compact th, .table-inspection.table-compact td { padding: 1.2px 3px; line-height: 1.08; }
   .classif-bom { font-weight: bold; color: #006622; }
   .classif-atencao { font-weight: bold; color: #c0392b; }
   .classif-avaria { font-weight: bold; color: #b30000; background: #fdf2f2; }
@@ -555,7 +557,13 @@
   <div id="step-photos" class="step">
     <div class="card">
       <div class="room-header">
-        <span class="badge" id="roomBadge">Ambiente 1 de 5</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+          <span class="badge" id="roomBadge">Ambiente 1 de 5</span>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <select id="quickRoomSelect" onchange="jumpToRoom(this.value)" style="padding:3px 6px; font-size:0.75rem; width:auto; border-radius:4px; border:1px solid #cbd5e1;"></select>
+            <button type="button" onclick="promptAddExtraRoom()" style="background:#0f172a; color:#d4af37; border:1px solid #c59b27; border-radius:4px; padding:3px 7px; font-size:0.75rem; font-weight:bold; cursor:pointer;" title="Adicionar cômodo extra">+ Cômodo</button>
+          </div>
+        </div>
         <h3 id="currentRoomTitle" style="margin-top:4px; font-size:1.15rem; color:#0f2027;">Sala</h3>
       </div>
 
@@ -962,6 +970,8 @@
       }
 
       progressFill.style.width = '100%';
+      vistoriaEmAndamento = true;
+      salvarRascunhoLocal();
 
     } catch (err) {
       console.error(err);
@@ -1387,6 +1397,34 @@
       });
   }
 
+  function jumpToRoom(indexStr) {
+    var idx = parseInt(indexStr, 10);
+    if (!isNaN(idx) && idx >= 0 && idx < selectedRooms.length) {
+      dispararAnaliseBackground(selectedRooms[currentRoomIndex]);
+      currentRoomIndex = idx;
+      salvarRascunhoLocal();
+      renderCurrentRoom();
+    }
+  }
+
+  function promptAddExtraRoom() {
+    var novo = prompt('Digite o nome do cômodo que deseja adicionar (ex: Varanda Gourmet, Escritório, Lavabo):');
+    if (!novo || !novo.trim()) return;
+    novo = novo.trim();
+    if (selectedRooms.indexOf(novo) !== -1) {
+      alert('Este cômodo já está na lista.');
+      return;
+    }
+    // Insere antes dos itens técnicos especiais para manter a ordem do laudo
+    var insertIdx = selectedRooms.findIndex(function(r) { return isSpecialItem(r); });
+    if (insertIdx === -1) insertIdx = selectedRooms.length;
+    selectedRooms.splice(insertIdx, 0, novo);
+    roomsData[novo] = { photos: [], aiAnalysis: null, unavailable: false, note: '' };
+    currentRoomIndex = insertIdx;
+    salvarRascunhoLocal();
+    renderCurrentRoom();
+  }
+
   function renderCurrentRoom() {
     var room = selectedRooms[currentRoomIndex];
     var isSpecial = isSpecialItem(room);
@@ -1395,6 +1433,15 @@
     badgeEl.innerText = (isSpecial ? "Item Técnico " : "Cômodo ") + (currentRoomIndex + 1) + " de " + selectedRooms.length;
     badgeEl.className = isSpecial ? "badge badge-special" : "badge";
     document.getElementById('currentRoomTitle').innerText = room;
+
+    var quickSel = document.getElementById('quickRoomSelect');
+    if (quickSel) {
+      quickSel.innerHTML = selectedRooms.map(function(r, i) {
+        var rData = roomsData[r] || { photos: [] };
+        var ok = rData.unavailable || (rData.photos && rData.photos.length >= getMinPhotosForRoom(r));
+        return '<option value="' + i + '"' + (i === currentRoomIndex ? ' selected' : '') + '>' + (i + 1) + '. ' + r + (ok ? ' ✓' : '') + '</option>';
+      }).join('');
+    }
 
     var noteInput = document.getElementById('roomNoteInput');
     if (noteInput) noteInput.value = roomsData[room].note || '';
@@ -1874,7 +1921,7 @@
           '<div class="room-banner">AMBIENTE ' + (idx + 1) + ': ' + roomName.toUpperCase() + '</div>' +
           '<div class="room-intro-text">' + ai.introducao + '</div>' +
 
-          '<table class="table-inspection">' +
+          '<table class="table-inspection' + (isDense ? ' table-compact' : '') + '">' +
             '<thead>' +
               '<tr>' +
                 '<th style="width:22%;">ELEMENTO</th>' +
@@ -2128,6 +2175,7 @@
     generatedPdfBlob = await html2pdf().set(opt).from(wrapper).outputPdf('blob');
     wrapper.style.display = 'none';
 
+    vistoriaEmAndamento = false;
     document.getElementById('step-photos').classList.remove('active');
     document.getElementById('step-final').classList.add('active');
     window.scrollTo(0, 0);
