@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Configure GEMINI_API_KEY, GROQ2_API_KEY ou VISTORIA_OPEN_API_KEY nas variáveis de ambiente da Vercel.' });
   }
 
-  const { roomName, photosDataUrls, isMeterReading } = req.body;
+  const { roomName, photosDataUrls, isMeterReading, roomNote } = req.body;
 
   if (!Array.isArray(photosDataUrls) || photosDataUrls.length === 0) {
     return res.status(400).json({ error: 'Nenhuma fotografia enviada.' });
@@ -25,20 +25,27 @@ export default async function handler(req, res) {
   // ------------------------------------------------------------------
   // PROMPT ÚNICO (usado por todos os provedores)
   // ------------------------------------------------------------------
-  const promptBase = `Você é perito de vistoria imobiliária. Analise TODAS as fotos do ambiente ou item "${roomName}" em conjunto. 
-Compare as imagens, mas descreva cada foto apenas pelo que está visível nela. 
-Não invente funcionamento, medidas, marcas, materiais, cores exatas ou avarias. 
-Não trate sombra, reflexo ou sujeira como dano sem evidência. 
-Quando funcionamento não puder ser testado, escreva "Não verificável por fotografia". 
-A coluna DESCRIÇÃO E ESTADO DE CONSERVAÇÃO deve ser detalhada. 
-Retorne exatamente ${photosDataUrls.length} itens em fotos, na ordem recebida. 
+  const promptBase = `Você é perito de vistoria imobiliária. Analise TODAS as fotos do ambiente ou item "${roomName}" em conjunto.
+Nos "elementos", decomponha obrigatoriamente todos os itens visíveis nas fotos seguindo este checklist técnico (quando visíveis):
+1. Piso e Rodapés (tipo de revestimento, integridade, rejuntes);
+2. Paredes e Pintura (tonalidade aparente, acabamento, manchas, furos ou fissuras);
+3. Teto e Iluminação (forro/laje, pintura, plafons, lâmpadas ou luminárias);
+4. Portas, Janelas, Vidros e Ferragens (folhas, alizares, maçanetas, fechaduras, esquadrias);
+5. Instalações Elétricas (tomadas, interruptores, espelhos, quadro);
+6. Louças, Metais, Bancadas e Armários (pias, cubas, torneiras, vaso sanitário, box, gabinetes).
+Compare as imagens, mas descreva apenas o que está visível. Não trate sombra ou reflexo como dano sem evidência. Quando funcionamento não puder ser testado por foto, escreva "Não verificável por fotografia".
+Retorne exatamente ${photosDataUrls.length} itens no array "fotos", na exata ordem recebida, detalhando o que cada ângulo mostra.
 Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou NÃO CONCLUSIVO.`;
 
   const promptMeter = isMeterReading
-    ? ` ATENÇÃO ESPECIAL: Este item é um medidor técnico ("${roomName}"). Identifique obrigatoriamente nos visores das fotografias o número de série/identificação do aparelho e a leitura numérica atual do consumo, informando-os claramente na descrição e nos elementos técnicos.`
+    ? ` ATENÇÃO ESPECIAL: Este item é um medidor técnico ("${roomName}"). Identifique obrigatoriamente nos visores das fotografias o número de série/identificação do aparelho e a leitura numérica exata atual do consumo (kWh, m³), informando-os claramente na descrição e nos elementos técnicos.`
     : '';
 
-  const prompt = promptBase + promptMeter;
+  const promptNote = (roomNote && String(roomNote).trim())
+    ? ` OBSERVAÇÃO PRESENCIAL DO VISTORIADOR NO LOCAL (incorpore obrigatoriamente nos elementos e ressalvas com linguagem pericial formal): "${String(roomNote).trim()}".`
+    : '';
+
+  const prompt = promptBase + promptMeter + promptNote;
 
   // ------------------------------------------------------------------
   // SCHEMA JSON (Gemini usa nativamente; OpenRouter/Groq recebem no prompt)
@@ -262,37 +269,12 @@ async function chamarGemini(geminiApiKey, photosDataUrls, prompt, schema) {
     }
   });
 
-  // Busca modelos disponíveis
-  let targetModels = [];
-  try {
-    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      if (Array.isArray(listData.models)) {
-        targetModels = listData.models
-          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-          .map(m => m.name.replace(/^models\//, ''));
-      }
-    }
-  } catch (_) {}
-
-  // Fallback fixo de modelos
-  if (!targetModels.length) {
-    targetModels = [
-      "gemini-2.0-flash",
-      "gemini-2.0-flash-lite",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b",
-      "gemini-1.5-pro"
-    ];
-  }
-
-  // Ordena: flash primeiro
-  targetModels.sort((a, b) => {
-    const af = a.includes('flash') ? 1 : 0;
-    const bf = b.includes('flash') ? 1 : 0;
-    return bf - af;
-  });
+  const targetModels = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash"
+  ];
 
   for (const model of targetModels) {
     try {
@@ -338,7 +320,7 @@ async function chamarGroq(groqApiKey, photosDataUrls, prompt, schema) {
       'Authorization': `Bearer ${groqApiKey}`
     },
     body: JSON.stringify({
-      model: "qwen/qwen3.8-27b",
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages: [{ role: "user", content }],
       temperature: 0.3
     })
