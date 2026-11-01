@@ -32,6 +32,7 @@
     --border: #e0e0e0;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  html, body { overscroll-behavior-y: none; }
   body { background: var(--bg); color: var(--text); padding-bottom: 20px; }
   
   header { 
@@ -573,10 +574,18 @@
         Marcar como: "Não possui / Não disponível no imóvel"
       </button>
 
+      <div style="margin-top:10px;">
+        <label style="margin-top:0;">Observação rápida / Ditado deste item (opcional):</label>
+        <input type="text" id="roomNoteInput" placeholder="Ex: Pintura nova, trinca no rodapé, porta emperrando..." oninput="saveCurrentRoomNote(this.value)">
+      </div>
+
       <div class="photo-counter" id="photoCountNotice">0 fotos</div>
       <div class="photo-gallery" id="roomPhotoGallery"></div>
 
-      <button id="btnNextRoom" class="btn btn-next" style="display:none;" onclick="handleNextRoom()">Passar para o próximo Item/Cômodo ➔</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="btnPrevRoom" class="btn" style="display:none; background:#64748b; color:#fff; width:38%;" onclick="handlePrevRoom()">⬅ Anterior</button>
+        <button id="btnNextRoom" class="btn btn-next" style="display:none;" onclick="handleNextRoom()">Passar para o próximo Item/Cômodo ➔</button>
+      </div>
       
       <div id="containerLinkHD" style="display:none; margin-top: 16px; margin-bottom: 8px;">
         <label>Link para acesso às fotos em alta definição:</label>
@@ -606,7 +615,7 @@
       </button>
 
       <button class="btn btn-download" onclick="downloadPdfDirect()">Baixar Arquivo PDF Novamente</button>
-      <button class="btn btn-next" style="margin-top:20px; background:#6c757d;" onclick="location.reload()">Iniciar Nova Vistoria</button>
+      <button class="btn btn-next" style="margin-top:20px; background:#6c757d;" onclick="resetarVistoriaCompleta()">Iniciar Nova Vistoria</button>
     </div>
   </div>
 
@@ -623,7 +632,10 @@
       <span id="camRoomTitle" style="font-weight:bold; font-size:1.05rem; color:#d4af37;">Cômodo</span>
       <div id="camMinNotice" style="font-size:0.75rem; color:#cbd5e1;">Mínimo de fotos: 3</div>
     </div>
-    <span id="camPhotoCounter" class="cam-count-chip">0 fotos</span>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button type="button" id="btnCamTorch" onclick="toggleCameraTorch()" style="background:#334155; color:#fff; border:1px solid #c59b27; border-radius:8px; padding:5px 10px; font-size:0.78rem; font-weight:bold; cursor:pointer;">🔦 Lanterna</button>
+      <span id="camPhotoCounter" class="cam-count-chip">0 fotos</span>
+    </div>
   </div>
 
   <div class="cam-video-container">
@@ -1169,15 +1181,125 @@
     return t;
   }
 
-  function goToStepRooms() {
-    document.getElementById('step-contract').classList.remove('active');
-    document.getElementById('step-rooms').classList.add('active');
-    window.scrollTo(0, 0);
-  }
-
   var selectedRooms = [];
   var currentRoomIndex = 0;
   var roomsData = {};
+  var roomAiPromises = {};
+  var vistoriaEmAndamento = false;
+
+  // --- TRAVA DE SEGURANÇA: ALERTA DE SAÍDA E SALVAMENTO EM INDEXEDDB ---
+  window.addEventListener('beforeunload', function (e) {
+    if (vistoriaEmAndamento) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  function openVistoriaDB() {
+    return new Promise(function(resolve, reject) {
+      var req = indexedDB.open('VistoriaFacilDB', 1);
+      req.onupgradeneeded = function(e) {
+        var db = e.target.result;
+        if (!db.objectStoreNames.contains('rascunho')) {
+          db.createObjectStore('rascunho');
+        }
+      };
+      req.onsuccess = function(e) { resolve(e.target.result); };
+      req.onerror = function(e) { reject(e.target.error); };
+    });
+  }
+
+  async function salvarRascunhoLocal() {
+    try {
+      var stepAtivo = document.querySelector('.step.active')?.id || 'step-contract';
+      var estado = {
+        stepAtivo: stepAtivo,
+        locador: document.getElementById('locador').value,
+        locatario: document.getElementById('locatario').value,
+        imovel: document.getElementById('imovel').value,
+        tipoVistoria: (document.querySelector('input[name="tipoVistoria"]:checked') || {}).value || 'Entrada',
+        numContrato: document.getElementById('numContrato').value,
+        dataVistoria: document.getElementById('dataVistoria').value,
+        dataInicio: document.getElementById('dataInicio').value,
+        dataTermino: document.getElementById('dataTermino').value,
+        linkFotosHD: document.getElementById('linkFotosHD').value,
+        selectedRooms: selectedRooms,
+        currentRoomIndex: currentRoomIndex,
+        roomsData: roomsData,
+        updatedAt: Date.now()
+      };
+      var db = await openVistoriaDB();
+      var tx = db.transaction('rascunho', 'readwrite');
+      tx.objectStore('rascunho').put(estado, 'atual');
+    } catch (e) {
+      console.warn('Falha ao salvar rascunho:', e);
+    }
+  }
+
+  async function limparRascunhoLocal() {
+    try {
+      vistoriaEmAndamento = false;
+      var db = await openVistoriaDB();
+      var tx = db.transaction('rascunho', 'readwrite');
+      tx.objectStore('rascunho').delete('atual');
+    } catch (e) {}
+  }
+
+  async function resetarVistoriaCompleta() {
+    await limparRascunhoLocal();
+    location.reload();
+  }
+
+  window.addEventListener('DOMContentLoaded', async function() {
+    ['locador','locatario','imovel','numContrato','dataVistoria','dataInicio','dataTermino','linkFotosHD'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', salvarRascunhoLocal);
+    });
+    try {
+      var db = await openVistoriaDB();
+      var tx = db.transaction('rascunho', 'readonly');
+      var req = tx.objectStore('rascunho').get('atual');
+      req.onsuccess = function() {
+        var salvo = req.result;
+        if (salvo && (salvo.locador || salvo.imovel || (salvo.selectedRooms && salvo.selectedRooms.length > 0))) {
+          if (confirm('Existe uma vistoria em andamento salva automaticamente. Deseja continuar de onde parou?')) {
+            document.getElementById('locador').value = salvo.locador || '';
+            document.getElementById('locatario').value = salvo.locatario || '';
+            document.getElementById('imovel').value = salvo.imovel || '';
+            document.getElementById('numContrato').value = salvo.numContrato || '';
+            if (salvo.dataVistoria) document.getElementById('dataVistoria').value = salvo.dataVistoria;
+            document.getElementById('dataInicio').value = salvo.dataInicio || '';
+            document.getElementById('dataTermino').value = salvo.dataTermino || '';
+            document.getElementById('linkFotosHD').value = salvo.linkFotosHD || '';
+            if (salvo.tipoVistoria === 'Saída') document.getElementById('tipoSaida').checked = true;
+            else document.getElementById('tipoEntrada').checked = true;
+
+            selectedRooms = salvo.selectedRooms || [];
+            currentRoomIndex = salvo.currentRoomIndex || 0;
+            roomsData = salvo.roomsData || {};
+            vistoriaEmAndamento = true;
+
+            document.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
+            var targetStep = (salvo.stepAtivo && salvo.stepAtivo !== 'step-final') ? salvo.stepAtivo : 'step-contract';
+            document.getElementById(targetStep).classList.add('active');
+            if (targetStep === 'step-photos' && selectedRooms.length > 0) {
+              renderCurrentRoom();
+            }
+          } else {
+            limparRascunhoLocal();
+          }
+        }
+      };
+    } catch (e) {}
+  });
+
+  function goToStepRooms() {
+    vistoriaEmAndamento = true;
+    document.getElementById('step-contract').classList.remove('active');
+    document.getElementById('step-rooms').classList.add('active');
+    salvarRascunhoLocal();
+    window.scrollTo(0, 0);
+  }
 
   function isSpecialItem(roomName) {
     var r = cleanSearch(roomName);
@@ -1223,14 +1345,46 @@
     }
 
     currentRoomIndex = 0;
-    roomsData = {};
-    selectedRooms.forEach(function(r) { 
-      roomsData[r] = { photos: [], aiAnalysis: null, unavailable: false }; 
+    selectedRooms.forEach(function(r) {
+      if (!roomsData[r]) {
+        roomsData[r] = { photos: [], aiAnalysis: null, unavailable: false, note: '' };
+      }
     });
 
+    vistoriaEmAndamento = true;
     document.getElementById('step-rooms').classList.remove('active');
     document.getElementById('step-photos').classList.add('active');
     renderCurrentRoom();
+    salvarRascunhoLocal();
+  }
+
+  function saveCurrentRoomNote(val) {
+    var room = selectedRooms[currentRoomIndex];
+    if (roomsData[room]) {
+      roomsData[room].note = val;
+      roomsData[room].aiAnalysis = null;
+      delete roomAiPromises[room];
+      salvarRascunhoLocal();
+    }
+  }
+
+  function dispararAnaliseBackground(roomName) {
+    var rData = roomsData[roomName];
+    if (!rData || rData.unavailable) return;
+    var min = getMinPhotosForRoom(roomName);
+    if (!rData.photos || rData.photos.length < min) return;
+    if (rData.aiAnalysis || roomAiPromises[roomName]) return;
+
+    roomAiPromises[roomName] = callGeminiPericialIndividual(roomName, rData.photos, rData.note)
+      .then(function(res) {
+        rData.aiAnalysis = res;
+        salvarRascunhoLocal();
+        return res;
+      })
+      .catch(function(err) {
+        console.warn('Background IA falhou para ' + roomName + ', tentará novamente no final:', err);
+        delete roomAiPromises[roomName];
+      });
   }
 
   function renderCurrentRoom() {
@@ -1241,6 +1395,12 @@
     badgeEl.innerText = (isSpecial ? "Item Técnico " : "Cômodo ") + (currentRoomIndex + 1) + " de " + selectedRooms.length;
     badgeEl.className = isSpecial ? "badge badge-special" : "badge";
     document.getElementById('currentRoomTitle').innerText = room;
+
+    var noteInput = document.getElementById('roomNoteInput');
+    if (noteInput) noteInput.value = roomsData[room].note || '';
+
+    var btnPrev = document.getElementById('btnPrevRoom');
+    if (btnPrev) btnPrev.style.display = currentRoomIndex > 0 ? 'inline-flex' : 'none';
 
     var btnUnavail = document.getElementById('btnToggleUnavailable');
     if (isSpecial) {
@@ -1265,13 +1425,19 @@
     roomsData[room].unavailable = !roomsData[room].unavailable;
     if (roomsData[room].unavailable) {
       roomsData[room].photos = [];
+      roomsData[room].aiAnalysis = null;
+      delete roomAiPromises[room];
     }
+    salvarRascunhoLocal();
     renderCurrentRoom();
   }
 
   function removePhoto(photoIndex) {
     var room = selectedRooms[currentRoomIndex];
     roomsData[room].photos.splice(photoIndex, 1);
+    roomsData[room].aiAnalysis = null;
+    delete roomAiPromises[room];
+    salvarRascunhoLocal();
     updatePhotosUI();
   }
 
@@ -1330,8 +1496,9 @@
     }
   }
 
-  /* --- CÂMERA CONTÍNUA DIRETA NO NAVEGADOR --- */
+  /* --- CÂMERA CONTÍNUA DIRETA NO NAVEGADOR + LANTERNA --- */
   let cameraStream = null;
+  let torchEnabled = false;
   const cameraModal = document.getElementById('continuous-camera-modal');
   const videoFeed = document.getElementById('cameraFeed');
   const camRoomTitle = document.getElementById('camRoomTitle');
@@ -1339,12 +1506,33 @@
   const camMinNotice = document.getElementById('camMinNotice');
   const camBtnNextDirect = document.getElementById('camBtnNextDirect');
 
+  async function toggleCameraTorch() {
+    if (!cameraStream) return;
+    const track = cameraStream.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      torchEnabled = !torchEnabled;
+      await track.applyConstraints({ advanced: [{ torch: torchEnabled }] });
+      const btnTorch = document.getElementById('btnCamTorch');
+      if (btnTorch) {
+        btnTorch.style.background = torchEnabled ? '#c59b27' : '#334155';
+        btnTorch.style.color = torchEnabled ? '#121315' : '#fff';
+      }
+    } catch (e) {
+      torchEnabled = false;
+      alert('Lanterna não suportada neste navegador/lente.');
+    }
+  }
+
   async function openContinuousCamera() {
     var room = selectedRooms[currentRoomIndex];
     var minPhotos = getMinPhotosForRoom(room);
     
     camRoomTitle.innerText = room;
     camMinNotice.innerText = "Mínimo exigido: " + minPhotos + " fotos";
+    torchEnabled = false;
+    const btnTorch = document.getElementById('btnCamTorch');
+    if (btnTorch) { btnTorch.style.background = '#334155'; btnTorch.style.color = '#fff'; }
     updateCamModalCounter();
 
     cameraModal.style.display = 'flex';
@@ -1367,6 +1555,7 @@
       cameraStream.getTracks().forEach(track => track.stop());
       cameraStream = null;
     }
+    torchEnabled = false;
     cameraModal.style.display = 'none';
     updatePhotosUI();
   }
@@ -1387,6 +1576,9 @@
     var room = selectedRooms[currentRoomIndex];
     roomsData[room].unavailable = false;
     roomsData[room].photos.push(dataUrl);
+    roomsData[room].aiAnalysis = null;
+    delete roomAiPromises[room];
+    salvarRascunhoLocal();
 
     videoFeed.style.opacity = '0.3';
     setTimeout(() => { videoFeed.style.opacity = '1'; }, 100);
@@ -1436,6 +1628,9 @@
           var room = selectedRooms[currentRoomIndex];
           roomsData[room].unavailable = false;
           roomsData[room].photos.push(dataUrl);
+          roomsData[room].aiAnalysis = null;
+          delete roomAiPromises[room];
+          salvarRascunhoLocal();
           updatePhotosUI();
         };
         img.src = event.target.result;
@@ -1445,21 +1640,34 @@
     cameraInput.value = '';
   });
 
-  function handleNextRoom() {
-    if (currentRoomIndex < selectedRooms.length - 1) {
-      currentRoomIndex++;
+  function handlePrevRoom() {
+    if (currentRoomIndex > 0) {
+      currentRoomIndex--;
+      salvarRascunhoLocal();
       renderCurrentRoom();
     }
   }
 
-  async function callGeminiPericialIndividual(roomName, photosDataUrls) {
+  function handleNextRoom() {
+    var roomAtual = selectedRooms[currentRoomIndex];
+    dispararAnaliseBackground(roomAtual);
+    if (currentRoomIndex < selectedRooms.length - 1) {
+      currentRoomIndex++;
+      salvarRascunhoLocal();
+      renderCurrentRoom();
+    }
+  }
+
+  async function callGeminiPericialIndividual(roomName, photosDataUrls, roomNote) {
+    var rClean = cleanSearch(roomName);
     var response = await fetch('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         roomName: roomName, 
-        photosDataUrls: photosDataUrls, 
-        isMeterReading: (cleanSearch(roomName).indexOf("luz") !== -1 || cleanSearch(roomName).indexOf("gas") !== -1)
+        photosDataUrls: photosDataUrls,
+        roomNote: roomNote || '',
+        isMeterReading: (rClean.indexOf("luz") !== -1 || rClean.indexOf("gas") !== -1 || rClean.indexOf("hidrometro") !== -1)
       })
     });
 
@@ -1547,7 +1755,16 @@
             continue;
           }
 
-          rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos);
+          if (rData.aiAnalysis) {
+            updateProgress('Já analisado em 2º plano: ' + room);
+            continue;
+          }
+          if (roomAiPromises[room]) {
+            rData.aiAnalysis = await roomAiPromises[room];
+          }
+          if (!rData.aiAnalysis) {
+            rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos, rData.note);
+          }
           updateProgress('Analisado: ' + room);
         }
       }
@@ -1668,8 +1885,7 @@
             '</thead>' +
             '<tbody>';
 
-      var maxEls = isDense ? 4 : ai.elementos.length;
-      for (var eIdx = 0; eIdx < Math.min(ai.elementos.length, maxEls); eIdx++) {
+      for (var eIdx = 0; eIdx < ai.elementos.length; eIdx++) {
         var el = ai.elementos[eIdx];
         var cClass = 'classif-bom';
         var cUpper = el.classificacao.toUpperCase();
