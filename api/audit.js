@@ -265,12 +265,37 @@ async function chamarGemini(geminiApiKey, photosDataUrls, prompt, schema) {
     }
   });
 
-  const targetModels = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-1.5-flash"
-  ];
+  // Busca modelos disponíveis
+  let targetModels = [];
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      if (Array.isArray(listData.models)) {
+        targetModels = listData.models
+          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''));
+      }
+    }
+  } catch (_) {}
+
+  // Fallback fixo de modelos
+  if (!targetModels.length) {
+    targetModels = [
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b",
+      "gemini-1.5-pro"
+    ];
+  }
+
+  // Ordena: flash primeiro
+  targetModels.sort((a, b) => {
+    const af = a.includes('flash') ? 1 : 0;
+    const bf = b.includes('flash') ? 1 : 0;
+    return bf - af;
+  });
 
   for (const model of targetModels) {
     try {
@@ -316,7 +341,7 @@ async function chamarGroq(groqApiKey, photosDataUrls, prompt, schema) {
       'Authorization': `Bearer ${groqApiKey}`
     },
     body: JSON.stringify({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: "qwen/qwen3.8-27b",
       messages: [{ role: "user", content }],
       temperature: 0.3
     })
