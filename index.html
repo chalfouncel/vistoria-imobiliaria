@@ -1808,7 +1808,12 @@
       'Content-Type':'application/json',Authorization:'Bearer '+session.access_token
     },body:JSON.stringify(payload)});
     const data = await res.json().catch(()=>({}));
-    if (!res.ok) throw Error(data.error || 'Verifique a conexão ou o acesso ao Drive.');
+    if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) {
+      const routeMissing = [404,405].includes(res.status) || res.ok;
+      throw Error(data.error || (routeMissing
+        ? 'A rota /api/drive-foto não está disponível nesta publicação. Confira api/drive-foto.js.'
+        : 'Falha no envio (' + res.status + ').'));
+    }
     return data;
   }
   let sending = false;
@@ -1816,21 +1821,36 @@
     if (sending || !driveOwner || !navigator.onLine) return;
     sending = true;
     async function send() {
-      while (driveOwner && navigator.onLine) {
-        const item = await queueAction('readonly',s=>s.index('owner').get(driveOwner));
-        if (!item) return;
-        const {data:{session}} = await supabaseClient.auth.getSession();
-        if (session?.user.id !== item.owner) return;
-        const base = {job:item.job,folder:item.folder};
-        if (!item.id) {
-          item.id = (await driveRequest(base,session)).id;
-          await queueAction('readwrite',s=>s.put(item));
+      const owner = driveOwner;
+      const jobs = await queueAction('readonly',s=>s.index('owner').getAllKeys(owner));
+      const {data:{session}} = await supabaseClient.auth.getSession();
+      if (!jobs.length || session?.user.id !== owner) return;
+      let sent = 0;
+      let remaining = 0;
+      let firstError = '';
+      for (const job of jobs) {
+        if (driveOwner !== owner || !navigator.onLine) break;
+        const item = await queueAction('readonly',s=>s.get(job));
+        if (!item) continue;
+        try {
+          const base = {job:item.job,folder:item.folder};
+          if (!item.id) {
+            const reserved = await driveRequest(base,session);
+            if (!reserved.id) throw Error('A API não devolveu o ID do arquivo.');
+            item.id = reserved.id;
+            await queueAction('readwrite',s=>s.put(item));
+          }
+          if (item.pdf || item.original) await sendDriveFile(item,session);
+          else await driveRequest({...base,id:item.id,name:item.name,jpeg:item.jpeg},session);
+          await queueAction('readwrite',s=>s.delete(item.job));
+          sent++;
+        } catch (err) {
+          remaining++;
+          if (!firstError) firstError = item.name + ' — ' + err.message;
         }
-        if (item.pdf || item.original) await sendDriveFile(item,session);
-        else await driveRequest({...base,id:item.id,name:item.name,jpeg:item.jpeg},session);
-        await queueAction('readwrite',s=>s.delete(item.job));
-        driveStatus('Enviado ao Drive: ' + item.name);
       }
+      if (remaining) driveStatus(sent + ' enviado(s), ' + remaining + ' com erro. ' + firstError);
+      else if (sent) driveStatus(sent + ' arquivo(s) enviado(s) ao Drive.');
     }
     try {
       if (navigator.locks) await navigator.locks.request('vistoria-drive-upload',send);
@@ -1855,7 +1875,7 @@
       if (status.expired) {
         delete item.upload;
         await queueAction('readwrite',s=>s.put(item));
-        throw Error('A sessão do PDF será retomada na próxima tentativa.');
+        throw Error('A sessão do arquivo expirou. O envio será reiniciado na próxima tentativa.');
       }
       offset = status.offset;
     }
@@ -1868,10 +1888,15 @@
       });
       const progress = await driveRequest({...base,action:'chunk',upload:item.upload,offset,encoded},session);
       if (progress.done) return;
-      if (!(progress.offset>offset)) throw Error('Envio interrompido; o PDF permanece na fila.');
+      if (progress.expired) {
+        delete item.upload;
+        await queueAction('readwrite',s=>s.put(item));
+        throw Error('A sessão do arquivo expirou. O envio será reiniciado na próxima tentativa.');
+      }
+      if (!(progress.offset>offset)) throw Error('Envio interrompido. O original permanece na fila.');
       offset=progress.offset;
     }
-    throw Error('Confirmação do PDF pendente.');
+    throw Error('Confirmação do arquivo pendente.');
   }
   async function enqueuePhoto(original,name,destination) {
     if (!destination) return;
