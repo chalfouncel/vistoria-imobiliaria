@@ -301,6 +301,7 @@
     flex-direction: column;
   }
 
+  .laudo-content-layer > * { flex-shrink: 0; }
   .table-header-grid {
     width: 100%;
     table-layout: fixed;
@@ -879,6 +880,24 @@
     return true;
   }
 
+  function tenantFromContract(text) {
+    // Prioridade à qualificação das partes, antes das cláusulas e dos logs.
+    const qualification = text.split(/\bcl[áa]usula\s+(?:primeira|1)|\blog de assinaturas\b/i)[0];
+    const named = /(?:^|[\s{])(?:locat[áa]ri[oa]|inquilin[oa])(?:\(a\))?\s*(?:\}\s*[:=-]?|[:=])\s*([^,;{}\d\n]{3,130})/giu;
+    const names = new Map();
+    for (const match of qualification.matchAll(named)) {
+      const name = match[1].split(/\s+(?:CPF|RG|CNPJ|brasileir[oa]|LOCADOR|FIADOR|residente|portador|ENDEREÇO)\b/i)[0].trim();
+      if (validTenantName(name)) names.set(cleanSearch(name), name);
+    }
+    return names.size === 1 ? [...names.values()][0] : '';
+  }
+
+  function validTenantName(name) {
+    return typeof name === 'string' && /^[\p{L}][\p{L}.'’ -]+$/u.test(name) &&
+      name.trim().split(/\s+/).length >= 2 && name.length <= 100 &&
+      !/\b(pix|chave|banco|conta|ag[eê]ncia|assinou|contrato|locat[aá]ri[oa]|locador|fiador|cpf|testemunha|email|profiss[aã]o|estado civil)\b/i.test(name);
+  }
+
   function cleanName(raw) {
     if (!raw) return "";
     var s = raw.trim();
@@ -970,6 +989,11 @@
           statusArea.innerHTML = '<span class="status-tag" style="background:#fff3cd; color:#856404;">Aviso: Verifique os campos cadastrais abaixo.</span>';
         }
       }
+
+      const tenant = tenantFromContract(textoInteiro);
+      document.getElementById('locatario').value = tenant;
+      if (tenant) highlightField('locatario');
+      else statusArea.textContent = 'Confira o contrato e preencha o locatário: a identificação ficou inconclusiva.';
 
       progressFill.style.width = '100%';
       vistoriaEmAndamento = true;
@@ -1276,7 +1300,7 @@
         if (salvo && (salvo.locador || salvo.imovel || (salvo.selectedRooms && salvo.selectedRooms.length > 0))) {
           if (confirm('Existe uma vistoria em andamento salva automaticamente. Deseja continuar de onde parou?')) {
             document.getElementById('locador').value = salvo.locador || '';
-            document.getElementById('locatario').value = salvo.locatario || '';
+            document.getElementById('locatario').value = validTenantName(salvo.locatario) ? salvo.locatario : '';
             document.getElementById('imovel').value = salvo.imovel || '';
             document.getElementById('numContrato').value = salvo.numContrato || '';
             if (salvo.dataVistoria) document.getElementById('dataVistoria').value = salvo.dataVistoria;
@@ -1891,7 +1915,89 @@
       .replace(/'/g, '&#39;');
   }
 
+  async function paginateReport(wrapper) {
+    await document.fonts.ready;
+    await Promise.all(Array.from(wrapper.querySelectorAll('img'), img => img.decode().catch(() => {})));
+    for (const source of Array.from(wrapper.children)) {
+      const layer = source.querySelector('.laudo-content-layer');
+      const footer = layer.querySelector('.page-footer-line');
+      const header = layer.querySelector('.table-header-grid');
+      const contents = [...layer.children].filter(el => el !== footer && el !== header);
+      let current = source;
+      let body = layer;
+      let bottom = footer;
+      const fits = el => el.getBoundingClientRect().bottom + 5 <= bottom.getBoundingClientRect().top;
+      if (contents.every(fits)) continue;
+      const banner = layer.querySelector('.room-banner')?.textContent || 'Laudo';
+      contents.forEach(el => el.remove());
+      function nextPage() {
+        const page = source.cloneNode(false);
+        page.append(source.querySelector('.laudo-watermark').cloneNode(true));
+        body = layer.cloneNode(false);
+        bottom = footer.cloneNode(true);
+        const title = document.createElement('div');
+        title.className = 'room-banner';
+        title.textContent = banner + ' (continuação)';
+        body.append(header.cloneNode(true), title, bottom);
+        page.append(body);
+        current.after(page);
+        current = page;
+      }
+      function place(block) {
+        body.insertBefore(block, bottom);
+        if (!fits(block)) {
+          nextPage();
+          body.insertBefore(block, bottom);
+          if (!fits(block)) throw new Error('Um bloco do laudo excedeu a altura de uma página.');
+        }
+      }
+      for (const el of contents) {
+        if (el.matches('.grid-fotos-report')) {
+          const cards = [...el.children];
+          const columns = el.classList.contains('grid-compact') ? 3 : 2;
+          for (let i = 0; i < cards.length; i += columns) {
+            const row = el.cloneNode(false);
+            row.append(...cards.slice(i, i + columns));
+            place(row);
+          }
+        } else if (el.matches('.table-inspection') && el.tBodies.length) {
+          let table = el.cloneNode(true);
+          table.tBodies[0].replaceChildren();
+          for (const row of [...el.tBodies[0].rows]) {
+            table.tBodies[0].append(row);
+            if (!table.isConnected) place(table);
+            else if (!fits(table)) {
+              row.remove();
+              table = table.cloneNode(true);
+              table.tBodies[0].replaceChildren(row);
+              nextPage();
+              place(table);
+            }
+          }
+        } else if (el.matches('.box-ressalvas')) {
+          for (const li of [...el.querySelectorAll('li')]) {
+            const box = el.cloneNode(false);
+            const list = document.createElement('ul');
+            list.append(li); box.append(list); place(box);
+          }
+        } else place(el);
+      }
+    }
+    const pages = [...wrapper.children];
+    pages.forEach((page, i) => {
+      page.querySelector('.page-footer-meta span:nth-child(2)').textContent = 'Página ' + (i + 1) + ' de ' + pages.length;
+    });
+    return pages;
+  }
+
   async function renderAndGeneratePdf() {
+    if (!document.getElementById('locatario').value.trim() ||
+        /\b(?:pix|chave bancária)\b/i.test(document.getElementById('locatario').value)) {
+      document.querySelector('.step.active')?.classList.remove('active');
+      document.getElementById('step-contract').classList.add('active');
+      document.getElementById('locatario').focus();
+      throw new Error('Confira o campo Locatário antes de emitir o laudo.');
+    }
     var locador = document.getElementById('locador').value.trim() || 'Não informado';
     var locatario = document.getElementById('locatario').value.trim() || 'Não informado';
     var numContrato = document.getElementById('numContrato').value.trim() || 'Não informado';
@@ -2211,7 +2317,20 @@
     };
 
     generatedPdfFileName = opt.filename;
-    generatedPdfBlob = await html2pdf().set(opt).from(wrapper).outputPdf('blob');
+    const sheets = await paginateReport(wrapper);
+    opt.pagebreak = { mode: [] };
+    // Inicializa o documento pelo bundle já carregado. Cada folha recebe uma imagem própria.
+    const seed = document.createElement('canvas');
+    seed.width = seed.height = 1;
+    const pdf = await html2pdf().set(opt).from(seed).toPdf().get('pdf');
+    for (const sheet of sheets) {
+      const canvas = await html2pdf().set(opt).from(sheet).toCanvas().get('canvas');
+      pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 210 * canvas.height / canvas.width);
+      canvas.width = canvas.height = 0;
+    }
+    pdf.deletePage(1);
+    generatedPdfBlob = pdf.output('blob');
     wrapper.style.display = 'none';
 
     vistoriaEmAndamento = false;
