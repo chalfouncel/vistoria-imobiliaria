@@ -614,7 +614,7 @@
   </div>
 
   <!-- ETAPA 4: LAUDO PRONTO & COMPARTILHAMENTO -->
-  <div id="step-final" class="step">
+  <div id="step-final" class="step"><p id="finalDriveStatus" role="status"></p>
     <div class="card" style="text-align:center;">
       <h2 style="justify-content:center; color:#28a745;">✓ Laudo Pericial Gerado com Sucesso!</h2>
       <p style="font-size:0.85rem; color:#555; margin:10px 0;">O Laudo de Vistoria foi auditado pela IA e diagramado no padrão pericial A4 sem páginas cortadas.</p>
@@ -683,7 +683,8 @@
 
   var driveOwner;
   async function checkUserSubscription(user) {
-    driveOwner = user?.id;
+    driveOwner = user?.email?.toLowerCase() === 'chalfouncorretor@gmail.com' ? user.id : null;
+    document.getElementById('containerLinkHD').hidden = !driveOwner;
     if (driveOwner) setTimeout(drainPhotoQueue, 0);
     if (!user) {
       authOverlay.style.display = 'flex';
@@ -857,6 +858,32 @@
     if(input.checked) input.parentElement.classList.add('checked');
   });
 
+  function propertyAddress(first,full) {
+    function clean(raw) {
+      return decodeAddressOnly(raw.replace(/CONDOMÕNIO/gi,'Condomínio').replace(/IM”VEL/gi,'imóvel')
+        .replace(/[ ,;.–-]+$/g,'')).replace(/\s+([,;])/g,'$1');
+    }
+    const label = /\bIM[ÓO”]VEL\s*:\s*/i.exec(first);
+    const clause = /\b(?:DO|DO OBJETO DO)\s+IM[ÓO”]VEL\b/i.exec(first);
+    const anchor = label || clause;
+    if (anchor) {
+      const section = first.slice(anchor.index + anchor[0].length).split(/\b(?:As partes|Cl[áa¡]usula|Clicksign|registrad[oa] no)\b/i)[0];
+      const address = section.match(/\b(?:rua|avenida|av\.|pra[çÁc]a|estrada|travessa|alameda|rodovia|largo)\s+.{3,}/i);
+      if (address) {
+        let result = clean(address[0]);
+        if (clause && !label) {
+          const unit = section.match(/\b(?:apartamento|unidade|casa)\s+(?:n[º°∫.]?\s*)?(\d+[A-Z]?)\b/i);
+          if (unit && !/\b(?:apto|apartamento|unidade)\s*\d/i.test(result)) result += ', unidade ' + unit[1];
+          const cep = first.slice(anchor.index).split(/\b(?:Clicksign|CL[ÁA¡]USULA SEGUNDA)\b/i)[0].match(/\bCEP\s*[:–-]?\s*(\d{5}-?\d{3})\b/i);
+          if (cep && !/\bCEP\b/i.test(result)) result += ' – CEP ' + cep[1];
+        }
+        return result;
+      }
+    }
+    const tagged = full.match(/\{(?:Endereco|Endereço|Imovel|Imóvel)\s*[:=]?\}\s*[:=-]?\s*([^{}]{3,300})(?=\{|$)/i);
+    return tagged ? clean(tagged[1]) : '';
+  }
+
   function decodeAddressOnly(text) {
     if (!text) return "";
     var s = text;
@@ -1000,11 +1027,15 @@
       progressFill.style.width = '45%';
       var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       
+      const folderAnnotations = new Set();
       var allRawLines = [];
       var page1RawLines = [];
 
       for (var p = 1; p <= pdf.numPages; p++) {
         var page = await pdf.getPage(p);
+        for (const item of await page.getAnnotations().catch(()=>[])) {
+          if (item.url && folderIdFromLink(item.url)) folderAnnotations.add(item.url);
+        }
         var textContent = await page.getTextContent();
         for (var i = 0; i < textContent.items.length; i++) {
           var str = textContent.items[i].str;
@@ -1027,11 +1058,12 @@
       }
 
       // Captura Link do Drive / Fotos
-      var linkDrive = textoInteiro.match(/https?:\/\/(?:drive\.google\.com|onedrive\.live\.com|1drv\.ms|dropbox\.com)[^\s"'>]+/i);
-      if (linkDrive) {
-        document.getElementById('linkFotosHD').value = linkDrive[0];
-        highlightField('linkFotosHD');
-      }
+      const explicitLink = textoInteiro.match(/\{(?:link|LinkFotos)\s*[:=]?\}\s*[:=-]?\s*(https?:\/\/[^\s{}]+)/i)?.[1];
+      const urls = textoInteiro.match(/https?:\/\/drive\.google\.com\/[^\s{}]+/gi) || [];
+      const candidates = [...urls,...folderAnnotations].filter(folderIdFromLink);
+      const ids = new Set(candidates.map(folderIdFromLink));
+      const contractLink = folderIdFromLink(explicitLink) ? explicitLink : ids.size === 1 ? candidates[0] : '';
+      if (contractLink) document.getElementById('linkFotosHD').value = contractLink;
 
       // MOTOR DE CAPTURA COM LEITURA PRIMÁRIA POR IA
       progressFill.style.width = '80%';
@@ -1070,6 +1102,10 @@
 
       }
 
+      const property = propertyAddress(page1RawLines.join(' '), textoInteiro);
+      document.getElementById('imovel').value = property;
+      if (!property) statusArea.append(' Confira o endereço do imóvel no contrato.');
+      if (driveOwner) document.getElementById('linkFotosHD').value = contractLink;
       progressFill.style.width = '100%';
       vistoriaEmAndamento = true;
       salvarRascunhoLocal();
@@ -1688,7 +1724,7 @@
   }
 
   async function openContinuousCamera() {
-    if (!captureDestination()) return;
+    if (driveOwner && !captureDestination()) return;
     var room = selectedRooms[currentRoomIndex];
     var minPhotos = getMinPhotosForRoom(room);
     
@@ -1724,15 +1760,17 @@
     updatePhotosUI();
   }
 
-  function contractFolder() {
+  function contractFolder() { return folderIdFromLink(document.getElementById('linkFotosHD').value); }
+  function folderIdFromLink(value) {
     try {
-      const url = new URL(document.getElementById('linkFotosHD').value.trim());
+      const url = new URL(String(value || '').trim());
       if (url.protocol !== 'https:' || url.hostname !== 'drive.google.com') return '';
       return url.pathname.match(/^\/drive\/(?:u\/\d+\/)?folders\/([a-zA-Z0-9_-]{10,160})\/?$/)?.[1] || '';
     } catch { return ''; }
   }
 
   function captureDestination() {
+    if (!driveOwner) return null;
     const folder = contractFolder();
     if (folder && driveOwner) return {folder,owner:driveOwner};
     const box = document.getElementById('containerLinkHD');
@@ -1743,6 +1781,7 @@
 
   function driveStatus(message) {
     document.getElementById('photoDestination').textContent = message;
+    document.getElementById('finalDriveStatus').textContent = message;
   }
 
   let queueDb;
@@ -1787,9 +1826,10 @@
           item.id = (await driveRequest(base,session)).id;
           await queueAction('readwrite',s=>s.put(item));
         }
-        await driveRequest({...base,id:item.id,name:item.name,jpeg:item.jpeg},session);
+        if (item.pdf || item.original) await sendDriveFile(item,session);
+        else await driveRequest({...base,id:item.id,name:item.name,jpeg:item.jpeg},session);
         await queueAction('readwrite',s=>s.delete(item.job));
-        driveStatus('Foto enviada ao Drive.');
+        driveStatus('Enviado ao Drive: ' + item.name);
       }
     }
     try {
@@ -1800,12 +1840,50 @@
   }
   window.addEventListener('online',drainPhotoQueue);
   setInterval(drainPhotoQueue,60000);
-  async function enqueuePhoto(src,name,destination) {
+  async function sendDriveFile(item,session) {
+    const file = item.original || item.pdf;
+    const base = {folder:item.folder, id:item.id, job:item.job, name:item.name, mime:item.original ? item.mime : 'application/pdf', total:file.size};
+    let offset = 0;
+    if (!item.upload) {
+      const start = await driveRequest({...base,action:'start'},session);
+      if (start.done) return;
+      item.upload = start.upload;
+      await queueAction('readwrite',s=>s.put(item));
+    } else {
+      const status = await driveRequest({...base,action:'status',upload:item.upload},session);
+      if (status.done) return;
+      if (status.expired) {
+        delete item.upload;
+        await queueAction('readwrite',s=>s.put(item));
+        throw Error('A sessão do PDF será retomada na próxima tentativa.');
+      }
+      offset = status.offset;
+    }
+    while (offset < file.size) {
+      const part = file.slice(offset,offset+1024*1024);
+      const encoded = await new Promise((ok,fail)=>{
+        const reader=new FileReader();
+        reader.onload=()=>ok(reader.result.split(',')[1]); reader.onerror=()=>fail(reader.error);
+        reader.readAsDataURL(part);
+      });
+      const progress = await driveRequest({...base,action:'chunk',upload:item.upload,offset,encoded},session);
+      if (progress.done) return;
+      if (!(progress.offset>offset)) throw Error('Envio interrompido; o PDF permanece na fila.');
+      offset=progress.offset;
+    }
+    throw Error('Confirmação do PDF pendente.');
+  }
+  async function enqueuePhoto(original,name,destination) {
+    if (!destination) return;
     try {
-      await queueAction('readwrite',s=>s.add({...destination,job:crypto.randomUUID(),jpeg:src.split(',')[1],name}));
+      const ext = (original.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toLowerCase();
+      const mime = original.type || ({jpg:'image/jpeg',jpeg:'image/jpeg',heic:'image/heic',heif:'image/heif',png:'image/png',webp:'image/webp'})[ext] || 'application/octet-stream';
+      const suffix = ext || (mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1].replace(/[^a-z0-9]/gi,''));
+      name = name.replace(/\.jpg$/i,'.'+suffix);
+      await queueAction('readwrite',s=>s.add({...destination,job:crypto.randomUUID(),original,mime,name}));
       driveStatus('Foto na fila de envio.');
       drainPhotoQueue();
-    } catch {driveStatus('Falha ao guardar a cópia para envio. A foto está no cômodo; use Baixar para conservá-la.');}
+    } catch {driveStatus('Falha ao guardar o original para envio. A miniatura do laudo contém apenas a versão reduzida.');}
   }
 
   function photoFilename(room, number) {
@@ -1814,33 +1892,55 @@
     return 'Vistoria-' + label + '-' + number + '-' + stamp + '.jpg';
   }
 
-  function captureContinuousPhoto() {
-    if (!videoFeed.videoWidth) return;
+  let takingStill = false;
+  async function captureContinuousPhoto() {
+    if (takingStill || !videoFeed.videoWidth) return;
     const destination = captureDestination();
-    if (!destination) return;
-
-    var canvas = document.createElement('canvas');
-    var MAX_LADO = 1600;
-    var escala = Math.min(1, MAX_LADO / Math.max(videoFeed.videoWidth, videoFeed.videoHeight));
-    canvas.width = Math.round(videoFeed.videoWidth * escala);
-    canvas.height = Math.round(videoFeed.videoHeight * escala);
-
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(videoFeed, 0, 0, canvas.width, canvas.height);
-    var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-
-    var room = selectedRooms[currentRoomIndex];
-    roomsData[room].unavailable = false;
-    roomsData[room].photos.push(dataUrl);
-    enqueuePhoto(dataUrl, photoFilename(room, roomsData[room].photos.length), destination);
-    roomsData[room].aiAnalysis = null;
-    delete roomAiPromises[room];
-    salvarRascunhoLocal();
-
-    videoFeed.style.opacity = '0.3';
-    setTimeout(() => { videoFeed.style.opacity = '1'; }, 100);
-
-    updateCamModalCounter();
+    if (driveOwner && !destination) return;
+    const room = selectedRooms[currentRoomIndex];
+    const data = roomsData[room];
+    const track = cameraStream?.getVideoTracks()[0];
+    takingStill = true;
+    let bitmap;
+    try {
+      let original;
+      if (destination && track && typeof ImageCapture !== 'undefined' && typeof createImageBitmap === 'function') {
+        try {
+          const camera = new ImageCapture(track);
+          original = await camera.takePhoto();
+          bitmap = await createImageBitmap(original);
+        } catch { /* Se a captura funcionou, preserve o original mesmo sem prévia decodificada. */ }
+      }
+      let source = bitmap || videoFeed;
+      const width = bitmap ? bitmap.width : videoFeed.videoWidth;
+      const height = bitmap ? bitmap.height : videoFeed.videoHeight;
+      if (!width || !height) throw Error('Câmera sem imagem.');
+      if (destination && !original) {
+        const frame = document.createElement('canvas');
+        frame.width = width; frame.height = height;
+        frame.getContext('2d').drawImage(source, 0, 0);
+        source = frame;
+        original = await new Promise((ok,fail)=>frame.toBlob(blob=>blob ? ok(blob) : fail(Error('Falha na captura.')), 'image/png'));
+      }
+      const preview = document.createElement('canvas');
+      const scale = Math.min(1,1600/Math.max(width,height));
+      preview.width = Math.round(width*scale); preview.height = Math.round(height*scale);
+      preview.getContext('2d').drawImage(source,0,0,preview.width,preview.height);
+      data.photos.push(preview.toDataURL('image/jpeg',0.75));
+      data.unavailable = false;
+      data.aiAnalysis = null;
+      delete roomAiPromises[room];
+      salvarRascunhoLocal();
+      updateCamModalCounter();
+      if (original) await enqueuePhoto(original,photoFilename(room,data.photos.length),destination);
+      videoFeed.style.opacity = '0.3';
+      setTimeout(()=>{ videoFeed.style.opacity='1'; },100);
+    } catch (err) {
+      driveStatus('Falha ao capturar a foto: '+err.message);
+    } finally {
+      bitmap?.close();
+      takingStill = false;
+    }
   }
 
   function updateCamModalCounter() {
@@ -1868,7 +1968,7 @@
     var files = Array.from(e.target.files);
     if (!files.length) return;
     const destination = captureDestination();
-    if (!destination) { cameraInput.value=''; return; }
+    if (driveOwner && !destination) { cameraInput.value=''; return; }
     const room = selectedRooms[currentRoomIndex];
 
     files.forEach(function(file) {
@@ -1888,7 +1988,7 @@
 
           roomsData[room].unavailable = false;
           roomsData[room].photos.push(dataUrl);
-          enqueuePhoto(dataUrl, photoFilename(room, roomsData[room].photos.length), destination);
+          enqueuePhoto(file, photoFilename(room, roomsData[room].photos.length), destination);
           roomsData[room].aiAnalysis = null;
           delete roomAiPromises[room];
           salvarRascunhoLocal();
@@ -2467,6 +2567,15 @@
     }
     pdf.deletePage(1);
     generatedPdfBlob = pdf.output('blob');
+    if (driveOwner) {
+      const folder = contractFolder();
+      if (!folder) driveStatus('Laudo gerado sem pasta de destino. Confira o link do contrato.');
+      else try {
+        await queueAction('readwrite',s=>s.add({job:crypto.randomUUID(), owner:driveOwner, folder, name:generatedPdfFileName, pdf:generatedPdfBlob}));
+        driveStatus('Laudo na fila do Drive.');
+        drainPhotoQueue();
+      } catch { driveStatus('Falha ao guardar o PDF na fila. Use o botão de download.'); }
+    }
     wrapper.style.display = 'none';
 
     vistoriaEmAndamento = false;
@@ -2474,7 +2583,7 @@
     document.getElementById('step-final').classList.add('active');
     window.scrollTo(0, 0);
 
-    sharePdfNative();
+    if (!driveOwner) sharePdfNative();
   }
 
   async function sharePdfNative() {
