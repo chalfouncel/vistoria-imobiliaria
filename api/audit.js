@@ -34,16 +34,11 @@ Nos "elementos", decomponha obrigatoriamente todos os itens visíveis nas fotos 
 5. Instalações Elétricas (tomadas, interruptores, espelhos, quadro);
 6. Louças, Metais, Bancadas e Armários (pias, cubas, torneiras, vaso sanitário, box, gabinetes).
 Compare as imagens, mas descreva apenas o que está visível. Não trate sombra ou reflexo como dano sem evidência. Quando funcionamento não puder ser testado por foto, escreva "Não verificável por fotografia".
-Retorne exatamente ${photosDataUrls.length} itens no array "fotos", na exata ordem recebida, detalhando o que cada ângulo mostra.
+Para cada fotografia, use numero de 1 até o tamanho deste lote, em ordem. Em local indique o elemento e a posição no enquadramento; em descricao registre o sinal visual concreto (forma, cor, padrão, extensão aparente). Havendo irregularidades, descreva todas as distinguíveis e marque avaria=true. Em elementos, associe cada constatação à foto pelo número local em foto. Priorize avarias sobre inventário. Sem dano distinguível, descreva o detalhe efetivamente observado; se a imagem for insuficiente, descreva o que impede a avaliação e use NÃO CONCLUSIVO. Não invente defeito, medida, causa, antiguidade, responsabilidade nem funcionamento. Não use frases de preenchimento. Mantenha legendas concisas. Deixe ressalvas vazias se não houver limitação específica.
 Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou NÃO CONCLUSIVO.`;
 
-  const promptMeter = isMeterReading
-    ? ` ATENÇÃO ESPECIAL: Este item é um medidor técnico ("${roomName}"). Identifique obrigatoriamente nos visores das fotografias o número de série/identificação do aparelho e a leitura numérica exata atual do consumo (kWh, m³), informando-os claramente na descrição e nos elementos técnicos.`
-    : '';
-
-  const promptNote = (roomNote && String(roomNote).trim())
-    ? ` OBSERVAÇÃO PRESENCIAL DO VISTORIADOR NO LOCAL (incorpore obrigatoriamente nos elementos e ressalvas com linguagem pericial formal): "${String(roomNote).trim()}".`
-    : '';
+  const promptMeter = isMeterReading ? ' Transcreva somente números e unidades legíveis no visor ou placa. Identifique o campo ilegível e a razão visível, sem completar dígitos.' : '';
+  const promptNote = roomNote ? ' Nota presencial fornecida pelo vistoriador (atribua a ele; não apresente como observação da IA): ' + String(roomNote) : '';
 
   const prompt = promptBase + promptMeter + promptNote;
 
@@ -59,12 +54,13 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
         items: {
           type: "object",
           properties: {
+            foto: { type: "integer" },
             elemento: { type: "string" },
             descricao: { type: "string" },
             funcionamento: { type: "string" },
             classificacao: { type: "string" }
           },
-          required: ["elemento", "descricao", "funcionamento", "classificacao"]
+          required: ["foto", "elemento", "descricao", "funcionamento", "classificacao"]
         }
       },
       fotos: {
@@ -72,11 +68,13 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
         items: {
           type: "object",
           properties: {
+            numero: { type: "integer" },
+            local: { type: "string" },
             titulo: { type: "string" },
             descricao: { type: "string" },
             avaria: { type: "boolean" }
           },
-          required: ["titulo", "descricao", "avaria"]
+          required: ["numero", "local", "titulo", "descricao", "avaria"]
         }
       },
       ressalvas: { type: "string" }
@@ -103,7 +101,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
       // 1) Tenta OpenRouter (VISTORIA_OPEN_API_KEY) primeiro
       if (vistoriaOpenApiKey) {
         try {
-          resultadoLote = await chamarOpenRouter(vistoriaOpenApiKey, lote, promptLote, schema);
+          resultadoLote = validarLote(await chamarOpenRouter(vistoriaOpenApiKey, lote, promptLote, schema), lote.length);
         } catch (err) {
           errosLote.push('OpenRouter: ' + err.message);
         }
@@ -112,7 +110,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
       // 2) Se OpenRouter falhar, tenta Gemini
       if (!resultadoLote && geminiApiKey) {
         try {
-          resultadoLote = await chamarGemini(geminiApiKey, lote, promptLote, schema);
+          resultadoLote = validarLote(await chamarGemini(geminiApiKey, lote, promptLote, schema), lote.length);
         } catch (err) {
           errosLote.push('Gemini: ' + err.message);
         }
@@ -121,7 +119,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
       // 3) Se Gemini falhar, tenta Groq
       if (!resultadoLote && groqApiKey) {
         try {
-          resultadoLote = await chamarGroq(groqApiKey, lote, promptLote, schema);
+          resultadoLote = validarLote(await chamarGroq(groqApiKey, lote, promptLote, schema), lote.length);
         } catch (err) {
           errosLote.push('Groq: ' + err.message);
         }
@@ -139,7 +137,7 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
     // ------------------------------------------------------------------
     // UNIFICA OS RESULTADOS DOS LOTES EM UM ÚNICO OBJETO
     // ------------------------------------------------------------------
-    const resultadoFinal = unificarResultados(resultadosParciais, photosDataUrls.length, roomName);
+    const resultadoFinal = unificarResultados(resultadosParciais);
 
     return res.status(200).json(resultadoFinal);
 
@@ -153,48 +151,34 @@ Use classificações: BOM ESTADO APARENTE, REGULAR/ATENÇÃO, AVARIA VISÍVEL ou
 // FUNÇÕES AUXILIARES
 // ============================================================================
 
-function dividirEmLotes(array, tamanho) {
-  const lotes = [];
-  for (let i = 0; i < array.length; i += tamanho) {
-    lotes.push(array.slice(i, i + tamanho));
+function validarLote(r, quantidade) {
+  const texto = v => typeof v === 'string' && v.trim().length > 0;
+  const concreta = v => texto(v) && !/^(registro fotográfico( técnico)?( do item)?|em conformidade visual|bom estado( aparente)?|item vistoriado|sem avarias( visíveis)?|vista (geral|técnica)( do ambiente| do elemento vistoriado)?|constatações limitadas ao registro fotográfico)[.! ]*$/iu.test(v.trim());
+  if (!Array.isArray(r?.fotos) || r.fotos.length !== quantidade ||
+      !r.fotos.every((f, i) => f?.numero === i + 1 && texto(f.titulo) && texto(f.local) && concreta(f.descricao) && typeof f.avaria === 'boolean') ||
+      !Array.isArray(r.elementos) || !r.elementos.length ||
+      !r.elementos.every(e => Number.isInteger(e?.foto) && e.foto >= 1 && e.foto <= quantidade &&
+        texto(e.elemento) && concreta(e.descricao) && texto(e.funcionamento) && texto(e.classificacao)) ||
+      typeof r.introducao !== 'string' || typeof r.ressalvas !== 'string') {
+    throw new Error('Análise incompleta ou sem evidência identificada por fotografia.');
   }
-  return lotes;
+  return r;
 }
 
-function unificarResultados(resultadosParciais, totalFotos, roomName) {
-  const introducoes = [];
-  const todosElementos = [];
-  const todasFotos = [];
-  const ressalvas = [];
-
-  resultadosParciais.forEach((r, idx) => {
-    if (r.introducao) introducoes.push(`Lote ${idx + 1}: ${r.introducao}`);
-    if (Array.isArray(r.elementos)) todosElementos.push(...r.elementos);
-    if (Array.isArray(r.fotos)) todasFotos.push(...r.fotos);
-    if (r.ressalvas) ressalvas.push(r.ressalvas);
-  });
-
-  // Garante que o array de fotos tenha o tamanho correto
-  while (todasFotos.length < totalFotos) {
-    todasFotos.push({
-      titulo: `Registro ${todasFotos.length + 1} — ${roomName}`,
-      descricao: 'Registro fotográfico técnico do item.',
-      avaria: false
-    });
+function unificarResultados(lotes) {
+  const resultado = { versaoEvidencia: 1, introducao: '', elementos: [], fotos: [], ressalvas: '' };
+  for (const lote of lotes) {
+    const offset = resultado.fotos.length;
+    for (const el of lote.elementos) {
+      resultado.elementos.push({ ...el, elemento: el.elemento + ' (foto ' + (offset + el.foto) + ')' });
+    }
+    for (const f of lote.fotos) {
+      resultado.fotos.push({ titulo: f.titulo, avaria: f.avaria, descricao: f.local + ' — ' + f.descricao });
+    }
   }
-
-  return {
-    introducao: introducoes.length
-      ? introducoes.join(' ')
-      : `Auditoria técnica do item/ambiente ${roomName}.`,
-    elementos: todosElementos.length
-      ? todosElementos
-      : [{ elemento: roomName, descricao: 'Constatações limitadas ao registro fotográfico.', funcionamento: 'Em conformidade visual', classificacao: 'BOM' }],
-    fotos: todasFotos.slice(0, totalFotos),
-    ressalvas: ressalvas.length
-      ? ressalvas.join(' ')
-      : 'Registros consolidados conforme visualizado no momento da inspeção.'
-  };
+  resultado.introducao = lotes.map(l => l.introducao.trim()).filter(Boolean).join(' ');
+  resultado.ressalvas = lotes.map(l => l.ressalvas.trim()).filter(Boolean).join(' ');
+  return resultado;
 }
 
 // ============================================================================
