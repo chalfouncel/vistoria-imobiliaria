@@ -16,7 +16,7 @@ async function googleToken(env) {
 export default async function handler(req,res) {
   if(req.method !== 'POST') return res.status(405).end();
   const env = process.env;
-  const required = ['SUPABASE_URL','DRIVE_UPLOAD_USER_IDS','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN'];
+  const required = ['SUPABASE_URL','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN'];
   if(required.some(key => !env[key]) || !(env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY))
     return res.status(503).json({error:'Configuração do envio ao Drive pendente.'});
   const auth = req.headers.authorization || '';
@@ -25,7 +25,7 @@ export default async function handler(req,res) {
     const session = await fetch(env.SUPABASE_URL+'/auth/v1/user',{headers:{Authorization:auth,apikey:env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY}});
     if(!session.ok) return res.status(401).end();
     const user = await session.json();
-    if(!env.DRIVE_UPLOAD_USER_IDS.split(',').map(s=>s.trim()).includes(user.id)) return res.status(403).json({error:'Vistoriador sem autorização para enviar ao Drive.'});
+    if(!user.email_confirmed_at || user.email?.toLowerCase() !== 'chalfouncorretor@gmail.com') return res.status(403).json({error:'Vistoriador sem autorização para enviar ao Drive.'});
     const {folder,id,jpeg,name,job} = req.body || {};
     if(!idPattern.test(folder || '') || !idPattern.test(job || '')) return res.status(400).json({error:'Destino inválido.'});
     const headers = {Authorization:'Bearer '+await googleToken(env)};
@@ -33,6 +33,34 @@ export default async function handler(req,res) {
       const r = await fetch(drive+'/files/generateIds?count=1&space=drive',{headers});
       if(!r.ok) throw Error('Não foi possível reservar o arquivo no Drive.');
       return res.json({id:(await r.json()).ids[0]});
+    }
+    if (req.body.action) {
+      const {action,total,upload,offset,encoded}=req.body;
+      const mime = req.body.mime || 'application/pdf';
+      const allowed = mime === 'application/pdf' || mime === 'application/octet-stream' || /^image\/[a-z0-9.+-]+$/i.test(mime);
+      if (!allowed || !idPattern.test(id) || !Number.isSafeInteger(total) || total<=0 || typeof name!=='string' || !name.length || name.length>240 || (mime==='application/pdf' && !name.toLowerCase().endsWith('.pdf'))) return res.status(400).end();
+      if (action==='start') {
+        const existing=await fetch(drive+'/files/'+id+'?supportsAllDrives=true&fields=parents,appProperties,trashed',{headers});
+        if (existing.ok) {
+          const file=await existing.json();
+          if (!file.trashed && file.parents?.includes(folder) && file.appProperties?.vistoriaJob===job && file.appProperties?.owner===user.id) return res.json({done:true});
+          return res.status(409).end();
+        }
+        if(existing.status!==404) throw Error('Falha ao verificar o PDF no Drive.');
+        const start=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',{method:'POST',headers:{...headers,'Content-Type':'application/json','X-Upload-Content-Type':mime,'X-Upload-Content-Length':String(total)},body:JSON.stringify({id,name,parents:[folder],mimeType:mime,appProperties:{vistoriaJob:job,owner:user.id}})});
+        if(!start.ok || !start.headers.get('location')) throw Error('O Drive recusou a criação do laudo na pasta do contrato.');
+        return res.json({upload:start.headers.get('location')});
+      }
+      const url=new URL(upload);
+      if(url.origin!=='https://www.googleapis.com' || url.pathname!=='/upload/drive/v3/files' || !url.searchParams.has('upload_id') || !['chunk','status'].includes(action)) return res.status(400).end();
+      const chunk=action==='chunk' ? Buffer.from(encoded || '', 'base64') : Buffer.alloc(0);
+      if(action==='chunk' && (!Number.isSafeInteger(offset)||offset<0||!chunk.length||chunk.length>1048576||offset+chunk.length>total)) return res.status(400).end();
+      const range=action==='status' ? 'bytes */'+total : 'bytes '+offset+'-'+(offset+chunk.length-1)+'/'+total;
+      const reply=await fetch(url,{method:'PUT',redirect:'manual',headers:{'Content-Length':String(chunk.length),'Content-Range':range,'Content-Type':mime},body:chunk});
+      if(reply.status===200 || reply.status===201) return res.json({done:true});
+      if(reply.status===404 || reply.status===410) return res.json({expired:true});
+      if(reply.status===308) return res.json({offset:Number(reply.headers.get('range')?.match(/-(\d+)$/)?.[1] ?? -1)+1});
+      throw Error('Falha no envio do PDF ao Drive. O laudo continua na fila.');
     }
     if(!idPattern.test(id) || typeof name!=='string' || name.length>240 || typeof jpeg!=='string' || !jpeg.startsWith('/9j/') || jpeg.length>4300000)
       return res.status(400).json({error:'JPEG ou identificação inválida.'});
