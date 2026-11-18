@@ -16,16 +16,17 @@ async function googleToken(env) {
 export default async function handler(req,res) {
   if(req.method !== 'POST') return res.status(405).end();
   const env = process.env;
-  const required = ['SUPABASE_URL','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN'];
-  if(required.some(key => !env[key]) || !(env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY))
-    return res.status(503).json({error:'Configuração do envio ao Drive pendente.'});
+  if (!env.SUPABASE_URL?.trim() || !(env.SUPABASE_ANON_KEY?.trim() || env.SUPABASE_SERVICE_ROLE_KEY?.trim()))
+    return res.status(503).json({error:'Falta configurar SUPABASE_URL ou a chave do Supabase na Vercel.'});
   const auth = req.headers.authorization || '';
   if(!auth.startsWith('Bearer ')) return res.status(401).end();
   try {
     const session = await fetch(env.SUPABASE_URL+'/auth/v1/user',{headers:{Authorization:auth,apikey:env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY}});
-    if(!session.ok) return res.status(401).end();
+    if(!session.ok) return res.status(401).json({error:'A sessão do Supabase expirou. Entre novamente para retomar a fila.'});
     const user = await session.json();
     if(!user.email_confirmed_at || user.email?.toLowerCase() !== 'chalfouncorretor@gmail.com') return res.status(403).json({error:'Vistoriador sem autorização para enviar ao Drive.'});
+    const missing = ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN'].filter(key=>!env[key]?.trim());
+    if (missing.length) return res.status(503).json({error:'Variáveis ausentes na Vercel: '+missing.join(', ')+'.'});
     const {folder,id,jpeg,name,job} = req.body || {};
     if(!idPattern.test(folder || '') || !idPattern.test(job || '')) return res.status(400).json({error:'Destino inválido.'});
     const headers = {Authorization:'Bearer '+await googleToken(env)};
@@ -40,15 +41,21 @@ export default async function handler(req,res) {
       const allowed = mime === 'application/pdf' || mime === 'application/octet-stream' || /^image\/[a-z0-9.+-]+$/i.test(mime);
       if (!allowed || !idPattern.test(id) || !Number.isSafeInteger(total) || total<=0 || typeof name!=='string' || !name.length || name.length>240 || (mime==='application/pdf' && !name.toLowerCase().endsWith('.pdf'))) return res.status(400).end();
       if (action==='start') {
+        const destination=await fetch(drive+'/files/'+folder+'?supportsAllDrives=true&fields=mimeType,trashed,capabilities(canAddChildren)',{headers});
+        if (!destination.ok) throw Error('A conta Google da integração não conseguiu abrir a pasta do contrato (Drive HTTP '+destination.status+').');
+        const info=await destination.json();
+        if (info.trashed || info.mimeType!=='application/vnd.google-apps.folder' || !info.capabilities?.canAddChildren)
+          throw Error('A conta Google da integração precisa ter permissão para adicionar arquivos à pasta do contrato.');
+
         const existing=await fetch(drive+'/files/'+id+'?supportsAllDrives=true&fields=parents,appProperties,trashed',{headers});
         if (existing.ok) {
           const file=await existing.json();
           if (!file.trashed && file.parents?.includes(folder) && file.appProperties?.vistoriaJob===job && file.appProperties?.owner===user.id) return res.json({done:true});
           return res.status(409).end();
         }
-        if(existing.status!==404) throw Error('Falha ao verificar o PDF no Drive.');
+        if(existing.status!==404) throw Error('Falha ao verificar o arquivo no Drive.');
         const start=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',{method:'POST',headers:{...headers,'Content-Type':'application/json','X-Upload-Content-Type':mime,'X-Upload-Content-Length':String(total)},body:JSON.stringify({id,name,parents:[folder],mimeType:mime,appProperties:{vistoriaJob:job,owner:user.id}})});
-        if(!start.ok || !start.headers.get('location')) throw Error('O Drive recusou a criação do laudo na pasta do contrato.');
+        if(!start.ok || !start.headers.get('location')) throw Error('O Drive recusou iniciar o envio (HTTP '+start.status+').');
         return res.json({upload:start.headers.get('location')});
       }
       const url=new URL(upload);
@@ -60,7 +67,7 @@ export default async function handler(req,res) {
       if(reply.status===200 || reply.status===201) return res.json({done:true});
       if(reply.status===404 || reply.status===410) return res.json({expired:true});
       if(reply.status===308) return res.json({offset:Number(reply.headers.get('range')?.match(/-(\d+)$/)?.[1] ?? -1)+1});
-      throw Error('Falha no envio do PDF ao Drive. O laudo continua na fila.');
+      throw Error('O Drive recusou os dados do arquivo (HTTP '+reply.status+'). O original continua na fila.');
     }
     if(!idPattern.test(id) || typeof name!=='string' || name.length>240 || typeof jpeg!=='string' || !jpeg.startsWith('/9j/') || jpeg.length>4300000)
       return res.status(400).json({error:'JPEG ou identificação inválida.'});
