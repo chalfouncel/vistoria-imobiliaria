@@ -574,8 +574,10 @@
         Abrir Câmera Contínua (Tirar Várias Fotos)
       </button>
 
-      <button type="button" id="choosePhotoFolder" hidden onclick="choosePhotoFolder()">Escolher pasta para as fotos</button>
-      <p id="photoDestination" aria-live="polite">Cada captura solicita uma cópia JPEG em Downloads. Você também pode baixar a foto pela miniatura.</p>
+      <details id="containerLinkHD"><summary>Pasta das fotos no Google Drive</summary>
+        <input type="url" id="linkFotosHD" aria-label="Pasta do contrato no Google Drive" placeholder="Cole o link da pasta do contrato">
+      </details>
+      <small id="photoDestination" role="status" aria-live="polite"></small>
       <label for="cameraInput" class="btn btn-gallery" style="margin-top: 6px;">
         📁 Selecionar Fotos da Galeria / Arquivos
       </label>
@@ -598,10 +600,7 @@
         <button id="btnNextRoom" class="btn btn-next" style="display:none;" onclick="handleNextRoom()">Passar para o próximo Item/Cômodo ➔</button>
       </div>
       
-      <div id="containerLinkHD" style="display:none; margin-top: 16px; margin-bottom: 8px;">
-        <label>Link para acesso às fotos em alta definição:</label>
-        <input type="url" id="linkFotosHD" placeholder="Cole o link aqui (Drive, OneDrive, etc)">
-      </div>
+
 
       <button id="btnFinish" class="btn btn-primary" style="display:none;" onclick="startGeminiAuditAndPdf()">Gerar Laudo Pericial com IA Gemini ★</button>
 
@@ -682,7 +681,10 @@
   const userExpiresBadge = document.getElementById('user-expires-badge');
   const authMsg = document.getElementById('auth-msg');
 
+  var driveOwner;
   async function checkUserSubscription(user) {
+    driveOwner = user?.id;
+    if (driveOwner) setTimeout(drainPhotoQueue, 0);
     if (!user) {
       authOverlay.style.display = 'flex';
       subBarrierOverlay.style.display = 'none';
@@ -880,6 +882,13 @@
     return true;
   }
 
+  function normalizePartyName(value) {
+    return String(value || '').normalize('NFC')
+      .replace(/Á„/gu, 'çã')
+      .replace(/(\p{L})„(?=\p{Ll})/gu, '$1ã')
+      .replace(/(\p{Ll})Á(?=\p{Ll})/gu, '$1ç');
+  }
+
   function tenantFromContract(text) {
     // Prioridade à qualificação das partes, antes das cláusulas e dos logs.
     const qualification = text.split(/\bcl[áa]usula\s+(?:primeira|1)|\blog de assinaturas\b/i)[0];
@@ -896,6 +905,7 @@
         const variants = new Set(Array.from(text.matchAll(signed), hit => hit[1]));
         candidate = variants.size === 1 ? [...variants][0] : '';
       }
+      candidate = normalizePartyName(candidate || name);
       if (validTenantName(candidate)) names.set(cleanSearch(candidate), candidate);
     }
     return names.size === 1 ? [...names.values()][0] : '';
@@ -905,6 +915,41 @@
     return typeof name === 'string' && /^[\p{L}][\p{L}.'’ -]+$/u.test(name) &&
       name.trim().split(/\s+/).length >= 2 && name.length <= 100 &&
       !/\b(pix|chave|banco|conta|ag[eê]ncia|assinou|contrato|locat[aá]ri[oa]|locador|fiador|cpf|testemunha|email|profiss[aã]o|estado civil)\b/i.test(name);
+  }
+
+  var saleInspection = false;
+
+  function setSaleInspection(sale) {
+    saleInspection = sale;
+    const labels = sale ? ['Vendedor(es)', 'Comprador(es)'] : ['Locador(a)', 'Locatário(a)'];
+    ['locador','locatario'].forEach((id, i) => {
+      const field = document.getElementById(id);
+      field.previousElementSibling.textContent = labels[i] + ':';
+      field.placeholder = labels[i];
+    });
+    document.querySelector('#step-contract h2').textContent = sale ? '1. Contrato de compra e venda' : '1. Contrato de locação';
+    document.querySelector('header h1').textContent = sale ? 'VISTORIA DE COMPRA E VENDA COM IA' : 'VISTORIA DE LOCAÇÃO COM IA';
+    const dates = document.getElementById('dataInicio').parentElement.parentElement;
+    dates.style.display = sale ? 'none' : 'grid';
+    const types = document.querySelector('.vistoria-tipo-grid');
+    types.style.display = sale ? 'none' : '';
+    types.previousElementSibling.hidden = sale;
+  }
+
+  function purchaseParties(text) {
+    const sellers = new Map(), buyers = new Map();
+    function add(role, name) {
+      name = normalizePartyName(name).trim().replace(/\s+/g, ' ');
+      if (validTenantName(name)) (role.startsWith('vend') ? sellers : buyers).set(cleanSearch(name), name);
+    }
+    // O log associa cada nome ao papel exercido, inclusive quando há vários titulares.
+    const signed = /\b\d{2}:\d{2}:\d{2}\s+([\p{L}][\p{L}\p{M}.'’ -]{2,120}?)\s+assinou como\s+(?:parte\s+)?(vendedora?|compradora?)\b/giu;
+    for (const match of text.matchAll(signed)) add(match[2].toLowerCase(), match[1]);
+    // Qualificações com rótulos explícitos em contratos sem log.
+    const qualification = text.split(/\bcl[áa¡]usula\s+(?:primeira|1)/i)[0];
+    const label = /(?:^|[\s;])(?:promitente\s+)?(vendedora?|compradora?)(?:\(a\))?\s*:\s*([\p{L}][\p{L}\p{M}.'’ -]{2,120}?)(?=\s*[,;]|\s+(?:cpf|cnpj)\b|$)/giu;
+    for (const match of qualification.matchAll(label)) add(match[1].toLowerCase(), match[2]);
+    return { sellers: [...sellers.values()].join('; '), buyers: [...buyers.values()].join('; ') };
   }
 
   function isPurchaseContract(firstPage) {
@@ -931,6 +976,7 @@
   contractInput.addEventListener('change', async function(e) {
     var file = e.target.files[0];
     if (!file) return;
+    setSaleInspection(false);
 
     document.getElementById('fileNameNotice').innerText = file.name;
     var loader = document.getElementById('parseLoader');
@@ -1005,15 +1051,23 @@
         }
       }
 
+      const ownerField = document.getElementById('locador');
+      ownerField.value = normalizePartyName(ownerField.value);
       const tenant = tenantFromContract(textoInteiro);
       document.getElementById('locatario').value = tenant;
       if (tenant) highlightField('locatario');
       else statusArea.textContent = 'Confira o contrato e preencha o locatário: a identificação ficou inconclusiva.';
       if (venda) {
-        for (const field of ['locador','locatario','dataInicio','dataTermino']) {
-          document.getElementById(field).value = '';
-        }
-        statusArea.textContent = 'Contrato de compra e venda identificado. Para emitir o laudo de locação, selecione o contrato de locação.';
+        setSaleInspection(true);
+        const parties = purchaseParties(textoInteiro);
+        document.getElementById('locador').value = parties.sellers;
+        document.getElementById('locatario').value = parties.buyers;
+        document.getElementById('dataInicio').value = '';
+        document.getElementById('dataTermino').value = '';
+        statusArea.textContent = parties.sellers && parties.buyers
+          ? 'Compra e venda: confira as partes identificadas abaixo.'
+          : 'Compra e venda: confira a qualificação das partes e complete o campo pendente.';
+
       }
 
       progressFill.style.width = '100%';
@@ -1271,6 +1325,7 @@
       var stepAtivo = document.querySelector('.step.active')?.id || 'step-contract';
       var estado = {
         stepAtivo: stepAtivo,
+        saleInspection: saleInspection,
         locador: document.getElementById('locador').value,
         locatario: document.getElementById('locatario').value,
         imovel: document.getElementById('imovel').value,
@@ -1320,8 +1375,10 @@
         var salvo = req.result;
         if (salvo && (salvo.locador || salvo.imovel || (salvo.selectedRooms && salvo.selectedRooms.length > 0))) {
           if (confirm('Existe uma vistoria em andamento salva automaticamente. Deseja continuar de onde parou?')) {
-            document.getElementById('locador').value = salvo.locador || '';
-            document.getElementById('locatario').value = validTenantName(salvo.locatario) ? salvo.locatario : '';
+            setSaleInspection(salvo.saleInspection === true);
+            document.getElementById('locador').value = normalizePartyName(salvo.locador);
+            const restoredTenant = normalizePartyName(salvo.locatario);
+            document.getElementById('locatario').value = (saleInspection || validTenantName(restoredTenant)) ? restoredTenant : '';
             document.getElementById('imovel').value = salvo.imovel || '';
             document.getElementById('numContrato').value = salvo.numContrato || '';
             if (salvo.dataVistoria) document.getElementById('dataVistoria').value = salvo.dataVistoria;
@@ -1589,16 +1646,16 @@
       if (isLastRoom) {
         btnNext.style.display = 'none';
         btnFinish.style.display = 'flex';
-        containerLinkHD.style.display = 'block';
+
       } else {
         btnNext.style.display = 'flex';
         btnFinish.style.display = 'none';
-        containerLinkHD.style.display = 'none';
+
       }
     } else {
       btnNext.style.display = 'none';
       btnFinish.style.display = 'none';
-      containerLinkHD.style.display = 'none';
+
     }
   }
 
@@ -1631,6 +1688,7 @@
   }
 
   async function openContinuousCamera() {
+    if (!captureDestination()) return;
     var room = selectedRooms[currentRoomIndex];
     var minPhotos = getMinPhotosForRoom(room);
     
@@ -1666,17 +1724,88 @@
     updatePhotosUI();
   }
 
-  var photoFolder = null;
-  var folderButton = document.getElementById('choosePhotoFolder');
-  folderButton.hidden = typeof window.showDirectoryPicker !== 'function';
-
-  async function choosePhotoFolder() {
+  function contractFolder() {
     try {
-      photoFolder = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'pictures' });
-      document.getElementById('photoDestination').textContent = 'Nesta sessão, cada captura será copiada para ' + photoFolder.name + '.';
-    } catch (err) {
-      if (err.name !== 'AbortError') alert('Não foi possível selecionar a pasta. O destino anterior continua ativo.');
+      const url = new URL(document.getElementById('linkFotosHD').value.trim());
+      if (url.protocol !== 'https:' || url.hostname !== 'drive.google.com') return '';
+      return url.pathname.match(/^\/drive\/(?:u\/\d+\/)?folders\/([a-zA-Z0-9_-]{10,160})\/?$/)?.[1] || '';
+    } catch { return ''; }
+  }
+
+  function captureDestination() {
+    const folder = contractFolder();
+    if (folder && driveOwner) return {folder,owner:driveOwner};
+    const box = document.getElementById('containerLinkHD');
+    box.open = true;
+    driveStatus(folder ? 'Entre na conta para enviar as fotos.' : 'Informe o link da pasta do contrato antes de fotografar.');
+    document.getElementById('linkFotosHD').focus();
+  }
+
+  function driveStatus(message) {
+    document.getElementById('photoDestination').textContent = message;
+  }
+
+  let queueDb;
+  function photoQueue() {
+    if (!queueDb) queueDb = new Promise((resolve,reject) => {
+      const req = indexedDB.open('VistoriaDriveUploads',1);
+      req.onupgradeneeded = () => req.result.createObjectStore('photos',{keyPath:'job'}).createIndex('owner','owner');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => { queueDb = null; reject(req.error); };
+    });
+    return queueDb;
+  }
+  async function queueAction(mode, action) {
+    const db = await photoQueue();
+    return new Promise((resolve,reject) => {
+      const tx = db.transaction('photos',mode);
+      const req = action(tx.objectStore('photos'));
+      tx.oncomplete = () => resolve(req.result);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+  async function driveRequest(payload,session) {
+    const res = await fetch('/api/drive-foto',{method:'POST',headers:{
+      'Content-Type':'application/json',Authorization:'Bearer '+session.access_token
+    },body:JSON.stringify(payload)});
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) throw Error(data.error || 'Verifique a conexão ou o acesso ao Drive.');
+    return data;
+  }
+  let sending = false;
+  async function drainPhotoQueue() {
+    if (sending || !driveOwner || !navigator.onLine) return;
+    sending = true;
+    async function send() {
+      while (driveOwner && navigator.onLine) {
+        const item = await queueAction('readonly',s=>s.index('owner').get(driveOwner));
+        if (!item) return;
+        const {data:{session}} = await supabaseClient.auth.getSession();
+        if (session?.user.id !== item.owner) return;
+        const base = {job:item.job,folder:item.folder};
+        if (!item.id) {
+          item.id = (await driveRequest(base,session)).id;
+          await queueAction('readwrite',s=>s.put(item));
+        }
+        await driveRequest({...base,id:item.id,name:item.name,jpeg:item.jpeg},session);
+        await queueAction('readwrite',s=>s.delete(item.job));
+        driveStatus('Foto enviada ao Drive.');
+      }
     }
+    try {
+      if (navigator.locks) await navigator.locks.request('vistoria-drive-upload',send);
+      else await send();
+    } catch(err) {driveStatus('Envio pendente. '+err.message);}
+    finally {sending=false;}
+  }
+  window.addEventListener('online',drainPhotoQueue);
+  setInterval(drainPhotoQueue,60000);
+  async function enqueuePhoto(src,name,destination) {
+    try {
+      await queueAction('readwrite',s=>s.add({...destination,job:crypto.randomUUID(),jpeg:src.split(',')[1],name}));
+      driveStatus('Foto na fila de envio.');
+      drainPhotoQueue();
+    } catch {driveStatus('Falha ao guardar a cópia para envio. A foto está no cômodo; use Baixar para conservá-la.');}
   }
 
   function photoFilename(room, number) {
@@ -1685,29 +1814,10 @@
     return 'Vistoria-' + label + '-' + number + '-' + stamp + '.jpg';
   }
 
-  async function copyCapturedPhoto(src, name) {
-    try {
-      if (photoFolder) {
-        var blob = await (await fetch(src)).blob();
-        var file = await photoFolder.getFileHandle(name, { create: true });
-        var writer = await file.createWritable();
-        await writer.write(blob);
-        await writer.close();
-      } else {
-        var link = document.createElement('a');
-        link.href = src;
-        link.download = name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }
-    } catch (err) {
-      alert('Falha ao copiar a foto para o aparelho. Use Baixar na miniatura do cômodo.');
-    }
-  }
-
   function captureContinuousPhoto() {
     if (!videoFeed.videoWidth) return;
+    const destination = captureDestination();
+    if (!destination) return;
 
     var canvas = document.createElement('canvas');
     var MAX_LADO = 1600;
@@ -1722,7 +1832,7 @@
     var room = selectedRooms[currentRoomIndex];
     roomsData[room].unavailable = false;
     roomsData[room].photos.push(dataUrl);
-    copyCapturedPhoto(dataUrl, photoFilename(room, roomsData[room].photos.length));
+    enqueuePhoto(dataUrl, photoFilename(room, roomsData[room].photos.length), destination);
     roomsData[room].aiAnalysis = null;
     delete roomAiPromises[room];
     salvarRascunhoLocal();
@@ -1757,6 +1867,9 @@
   cameraInput.addEventListener('change', function(e) {
     var files = Array.from(e.target.files);
     if (!files.length) return;
+    const destination = captureDestination();
+    if (!destination) { cameraInput.value=''; return; }
+    const room = selectedRooms[currentRoomIndex];
 
     files.forEach(function(file) {
       var reader = new FileReader();
@@ -1772,9 +1885,10 @@
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
           var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-          var room = selectedRooms[currentRoomIndex];
+
           roomsData[room].unavailable = false;
           roomsData[room].photos.push(dataUrl);
+          enqueuePhoto(dataUrl, photoFilename(room, roomsData[room].photos.length), destination);
           roomsData[room].aiAnalysis = null;
           delete roomAiPromises[room];
           salvarRascunhoLocal();
@@ -1883,7 +1997,7 @@
               introducao: 'O item ' + room + ' foi formalmente declarado como INEXISTENTE ou NÃO DISPONÍVEL para conferência no momento da vistoria.',
               elementos: [{ elemento: room, descricao: 'Não disponível / Inexistente no imóvel inspecionado.', funcionamento: 'Não aplicável', classificacao: 'NÃO POSSUI' }],
               fotos: [],
-              ressalvas: 'Locador e Locatário declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
+              ressalvas: (saleInspection ? 'Partes da compra e venda' : 'Locador e Locatário') + ' declaram ciência da inexistência ou indisponibilidade de acesso ao ' + room + ' nesta vistoria.'
             };
             updateProgress('Item conferido: ' + room);
             continue;
@@ -2017,7 +2131,7 @@
       document.querySelector('.step.active')?.classList.remove('active');
       document.getElementById('step-contract').classList.add('active');
       document.getElementById('locatario').focus();
-      throw new Error('Confira o campo Locatário antes de emitir o laudo.');
+      throw new Error(saleInspection ? 'Confira o comprador antes de emitir o laudo.' : 'Confira o locatário antes de emitir o laudo.');
     }
     var locador = document.getElementById('locador').value.trim() || 'Não informado';
     var locatario = document.getElementById('locatario').value.trim() || 'Não informado';
@@ -2026,7 +2140,8 @@
     var dInicio = document.getElementById('dataInicio').value ? document.getElementById('dataInicio').value.split('-').reverse().join('/') : '';
     var dTermino = document.getElementById('dataTermino').value ? document.getElementById('dataTermino').value.split('-').reverse().join('/') : '';
     var dVistoria = document.getElementById('dataVistoria').value ? document.getElementById('dataVistoria').value.split('-').reverse().join('/') : '';
-    var tipoVistoria = (document.querySelector('input[name="tipoVistoria"]:checked') || {}).value || 'Entrada';
+    var tipoVistoria = saleInspection ? 'Compra e venda' : (document.querySelector('input[name="tipoVistoria"]:checked') || {}).value || 'Entrada';
+    var modalidade = saleInspection ? 'Compra e Venda' : 'Locação';
     var linkHD = document.getElementById('linkFotosHD').value.trim();
 
     var wrapper = document.getElementById('pdfTemplateWrapper');
@@ -2056,7 +2171,7 @@
             '<tr>' +
               '<td class="thg-logo"><img src="/logo.png" alt="M&IC"></td>' +
               '<td class="thg-title">' +
-                '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>LAUDO DE VISTORIA DE LOCAÇÃO</div>' +
+                '<div class="laudo-main-title">VISTORIA DE ' + tipoVistoria.toUpperCase() + '<br>LAUDO DE VISTORIA DE ' + modalidade.toUpperCase() + '</div>' +
                 '<div class="laudo-sub-title">' + imovel + '</div>' +
               '</td>' +
               '<td class="thg-meta">' +
@@ -2068,9 +2183,9 @@
 
           '<table class="table-cadastral">' +
             '<tr>' +
-              '<td class="cad-lbl">Locador/Proprietário:</td>' +
+              '<td class="cad-lbl">' + (saleInspection ? 'Vendedor(es)' : 'Locador/Proprietário') + ':</td>' +
               '<td class="cad-val"><strong>' + locador + '</strong></td>' +
-              '<td class="cad-lbl">Locatário(a):</td>' +
+              '<td class="cad-lbl">' + (saleInspection ? 'Comprador(es)' : 'Locatário(a)') + ':</td>' +
               '<td class="cad-val"><strong>' + locatario + '</strong></td>' +
             '</tr>' +
             '<tr>' +
@@ -2082,8 +2197,8 @@
             '<tr>' +
               '<td class="cad-lbl">Tipo / Data:</td>' +
               '<td class="cad-val"><strong>' + tipoVistoria.toUpperCase() + '</strong> — ' + dVistoria + '</td>' +
-              '<td class="cad-lbl">Vigência:</td>' +
-              '<td class="cad-val">' + dInicio + ' a ' + dTermino + '</td>' +
+              (saleInspection ? '<td></td>' : '<td class="cad-lbl">Vigência:</td>') +
+              '<td class="cad-val">' + (saleInspection ? '' : dInicio + ' a ' + dTermino) + '</td>' +
             '</tr>' +
           '</table>' +
 
@@ -2148,7 +2263,7 @@
 
           '<div class="page-footer-line">' +
             '<div class="page-footer-meta">' +
-              '<span>Laudo de Vistoria de Locação | Residencial</span>' +
+              '<span>Laudo de Vistoria de ' + modalidade + ' | Residencial</span>' +
               '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
               '<span>Data de Vistoria: ' + dVistoria + '</span>' +
             '</div>' +
@@ -2228,7 +2343,7 @@
       specialHtml += 
           '<div class="page-footer-line">' +
             '<div class="page-footer-meta">' +
-              '<span>Laudo de Vistoria de Locação | Residencial</span>' +
+              '<span>Laudo de Vistoria de ' + modalidade + ' | Residencial</span>' +
               '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
               '<span>Data de Vistoria: ' + dVistoria + '</span>' +
             '</div>' +
@@ -2289,18 +2404,18 @@
     });
 
     finalHtml += 
-            '<li style="margin-top:6px;"><strong>PRAZO E REGRAS EXPRESSAS DE CONTESTAÇÃO DA VISTORIA:</strong><br>' +
+            (saleInspection ? '' : '<li style="margin-top:6px;"><strong>PRAZO E REGRAS EXPRESSAS DE CONTESTAÇÃO DA VISTORIA:</strong><br>' +
             '<div style="margin-top:3px; padding:5px 7px; border-left:3px solid #c59b27; background:#faf8f2; text-align:justify;">' +
             'Fica expressamente fixado o prazo decadencial de <strong>15 (quinze) dias corridos</strong>, contados formalmente a partir da <strong>entrega definitiva das chaves</strong> ao LOCATÁRIO, para apontar formalmente à administração quaisquer divergências ou vícios ocultos. Findo esse prazo, presume-se aceito o imóvel no estado deste laudo.' +
             '</div>' +
-            '</li>' +
+            '</li>') +
           '</ul>' +
         '</div>' +
 
         '<div class="room-banner" style="margin-top:10px;">6. TERMO DE CONCORDÂNCIA E ENCERRAMENTO</div>' +
         '<div class="termo-concordancia-box">' +
           '<p style="margin-bottom:4px;">' +
-            'Por estarem as partes cientes com as constatações técnicas e acervo para os ambientes <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento passa a fazer parte integrante e indissociável do Contrato de Locação formalizado eletronicamente via Clicksign.' +
+            'Por estarem as partes cientes com as constatações técnicas e acervo para os ambientes <strong>' + selectedRooms.join(', ').toUpperCase() + '</strong>, o presente documento passa a fazer parte integrante e indissociável do Contrato de ' + modalidade + ' formalizado eletronicamente via Clicksign.' +
           '</p>' +
           '<p style="color:#555; font-size:6.4pt;">' +
             'Documento validado eletronicamente com integridade jurídica vinculada ao Clicksign nº <strong>' + numContrato + '</strong>, inspecionado por <strong>' + currentVistoriadorEmail + '</strong>, dispensando assinaturas físicas manuscritas adicionais.' +
@@ -2315,7 +2430,7 @@
 
         '<div class="page-footer-line">' +
           '<div class="page-footer-meta">' +
-            '<span>Laudo de Vistoria de Locação | Residencial</span>' +
+            '<span>Laudo de Vistoria de ' + modalidade + ' | Residencial</span>' +
             '<span>Página ' + pageNum + ' de ' + totalPages + '</span>' +
             '<span>Data de Vistoria: ' + dVistoria + '</span>' +
           '</div>' +
@@ -2369,7 +2484,7 @@
       try {
         await navigator.share({
           files: [file],
-          title: 'Laudo de Vistoria de Locação',
+          title: saleInspection ? 'Laudo de Vistoria de Compra e Venda' : 'Laudo de Vistoria de Locação',
           text: 'Segue o laudo técnico pericial de vistoria gerado com IA.'
         });
       } catch (e) {
