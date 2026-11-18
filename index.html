@@ -883,11 +883,20 @@
   function tenantFromContract(text) {
     // Prioridade à qualificação das partes, antes das cláusulas e dos logs.
     const qualification = text.split(/\bcl[áa]usula\s+(?:primeira|1)|\blog de assinaturas\b/i)[0];
-    const named = /(?:^|[\s{])(?:locat[áa]ri[oa]|inquilin[oa])(?:\(a\))?\s*(?:\}\s*[:=-]?|[:=])\s*([^,;{}\d\n]{3,130})/giu;
+    const named = /(?:^|[\s{])(?:locat[áa¡\x60]ri[oa]|inquilin[oa])(?:\s*\(\s*a\s*\))?\s*(?:\}\s*[:=-]?|[:=])\s*([^,;{}\d\n]{3,130})/giu;
     const names = new Map();
     for (const match of qualification.matchAll(named)) {
       const name = match[1].split(/\s+(?:CPF|RG|CNPJ|brasileir[oa]|LOCADOR|FIADOR|residente|portador|ENDEREÇO)\b/i)[0].trim();
-      if (validTenantName(name)) names.set(cleanSearch(name), name);
+      let candidate = name;
+      if (/[„ª�]/u.test(name)) {
+        // Recupera a grafia pelo mesmo nome no registro de assinatura com papel explícito.
+        const pattern = Array.from(name, c => /[„ª�]/u.test(c) ? '\\p{L}' :
+          c.replace(/[.*+?^$\x7b\x7d()|[\]\\]/g, '\\$&')).join('');
+        const signed = new RegExp('(?:^|\\s)(' + pattern + ')\\s+(?:CPF\\s*:\\s*[\\d.\\s-]+\\s*)?assinou\\s+(?:como|o documento enquanto)\\s+locat[áa]ri[oa]\\b', 'giu');
+        const variants = new Set(Array.from(text.matchAll(signed), hit => hit[1]));
+        candidate = variants.size === 1 ? [...variants][0] : '';
+      }
+      if (validTenantName(candidate)) names.set(cleanSearch(candidate), candidate);
     }
     return names.size === 1 ? [...names.values()][0] : '';
   }
@@ -896,6 +905,11 @@
     return typeof name === 'string' && /^[\p{L}][\p{L}.'’ -]+$/u.test(name) &&
       name.trim().split(/\s+/).length >= 2 && name.length <= 100 &&
       !/\b(pix|chave|banco|conta|ag[eê]ncia|assinou|contrato|locat[aá]ri[oa]|locador|fiador|cpf|testemunha|email|profiss[aã]o|estado civil)\b/i.test(name);
+  }
+
+  function isPurchaseContract(firstPage) {
+    const title = cleanSearch(firstPage).slice(0, 550);
+    return /\bcontrato\b.{0,100}?\b(?:venda e compra|compra e venda|sinal(?: de)? venda financiada)\b/.test(title);
   }
 
   function cleanName(raw) {
@@ -957,6 +971,7 @@
 
       progressFill.style.width = '65%';
       var textoInteiro = allRawLines.join(" ");
+      var venda = isPurchaseContract(page1RawLines.join(' '));
 
       // Captura Hash / UUID Clicksign
       var mUuid = textoInteiro.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
@@ -975,7 +990,7 @@
       // MOTOR DE CAPTURA COM LEITURA PRIMÁRIA POR IA
       progressFill.style.width = '80%';
       var amostraTexto = page1RawLines.join("\n") + "\n\n" + allRawLines.slice(0, 150).join(" ");
-      var aiSucesso = await tryAiContractParsing(amostraTexto);
+      var aiSucesso = !venda && await tryAiContractParsing(amostraTexto);
 
       if (aiSucesso && document.getElementById('locador').value && document.getElementById('locatario').value) {
         statusArea.innerHTML = '<span class="status-tag tag-ok">✓ Contrato lido e auditado via Inteligência Artificial!</span>';
@@ -994,6 +1009,12 @@
       document.getElementById('locatario').value = tenant;
       if (tenant) highlightField('locatario');
       else statusArea.textContent = 'Confira o contrato e preencha o locatário: a identificação ficou inconclusiva.';
+      if (venda) {
+        for (const field of ['locador','locatario','dataInicio','dataTermino']) {
+          document.getElementById(field).value = '';
+        }
+        statusArea.textContent = 'Contrato de compra e venda identificado. Para emitir o laudo de locação, selecione o contrato de locação.';
+      }
 
       progressFill.style.width = '100%';
       vistoriaEmAndamento = true;
