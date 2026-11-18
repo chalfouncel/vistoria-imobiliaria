@@ -1289,6 +1289,9 @@
             selectedRooms = salvo.selectedRooms || [];
             currentRoomIndex = salvo.currentRoomIndex || 0;
             roomsData = salvo.roomsData || {};
+            Object.values(roomsData).forEach(item => {
+              if (item.aiAnalysis?.versaoEvidencia !== 1) item.aiAnalysis = null;
+            });
             vistoriaEmAndamento = true;
 
             document.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
@@ -1387,16 +1390,18 @@
     if (!rData.photos || rData.photos.length < min) return;
     if (rData.aiAnalysis || roomAiPromises[roomName]) return;
 
-    roomAiPromises[roomName] = callGeminiPericialIndividual(roomName, rData.photos, rData.note)
+    const pending = callGeminiPericialIndividual(roomName, rData.photos, rData.note)
       .then(function(res) {
+        if (roomAiPromises[roomName] !== pending) return;
         rData.aiAnalysis = res;
         salvarRascunhoLocal();
         return res;
       })
       .catch(function(err) {
         console.warn('Background IA falhou para ' + roomName + ', tentará novamente no final:', err);
-        delete roomAiPromises[roomName];
+        if (roomAiPromises[roomName] === pending) delete roomAiPromises[roomName];
       });
+    roomAiPromises[roomName] = pending;
   }
 
   function jumpToRoom(indexStr) {
@@ -1778,24 +1783,11 @@
   }
 
   function normalizeRoomResult(obj, roomName, photoCount) {
-    obj = obj || {};
-    var fs = Array.isArray(obj.fotos) ? obj.fotos : [];
-    var fotos = [];
-    for (var i = 0; i < photoCount; i++) {
-      var f = fs[i] || {};
-      fotos.push({
-        titulo: String(f.titulo || ('Registro ' + (i + 1) + ' — ' + roomName)).trim(),
-        descricao: String(f.descricao || 'Registro fotográfico técnico do item.').trim(),
-        avaria: f.avaria === true
-      });
+    if (obj?.versaoEvidencia !== 1 || !Array.isArray(obj.fotos) || obj.fotos.length !== photoCount ||
+        !obj.fotos.every(f => f && f.titulo && f.descricao) || !obj.elementos?.length) {
+      throw new Error('Análise incompleta em ' + roomName + '. Tente gerar o laudo novamente.');
     }
-    var els = Array.isArray(obj.elementos) ? obj.elementos : [];
-    return {
-      introducao: String(obj.introducao || ('Auditoria técnica do item/ambiente ' + roomName + '.')).trim(),
-      elementos: els.length ? els : [{ elemento: roomName, descricao: 'Constatações limitadas ao registro fotográfico.', funcionamento: 'Em conformidade visual', classificacao: 'BOM ESTADO APARENTE' }],
-      fotos: fotos,
-      ressalvas: String(obj.ressalvas || 'Registros consolidados conforme visualizado no momento da inspeção.').trim()
-    };
+    return obj;
   }
 
   async function startGeminiAuditAndPdf() {
@@ -1969,7 +1961,7 @@
           '</table>' +
 
           '<div class="room-banner">AMBIENTE ' + (idx + 1) + ': ' + roomName.toUpperCase() + '</div>' +
-          '<div class="room-intro-text">' + ai.introducao + '</div>' +
+          '<div class="room-intro-text">' + escapeHtml(ai.introducao) + '</div>' +
 
           '<table class="table-inspection' + (isDense ? ' table-compact' : '') + '">' +
             '<thead>' +
@@ -1991,10 +1983,10 @@
 
         pageHtml += 
           '<tr>' +
-            '<td><strong>' + el.elemento + '</strong></td>' +
-            '<td>' + el.descricao + '</td>' +
-            '<td>' + el.funcionamento + '</td>' +
-            '<td class="' + cClass + '">' + el.classificacao + '</td>' +
+            '<td><strong>' + escapeHtml(el.elemento) + '</strong></td>' +
+            '<td>' + escapeHtml(el.descricao) + '</td>' +
+            '<td>' + escapeHtml(el.funcionamento) + '</td>' +
+            '<td class="' + cClass + '">' + escapeHtml(el.classificacao) + '</td>' +
           '</tr>';
       }
 
@@ -2007,7 +1999,7 @@
       for (var fIdx = 0; fIdx < totalFotos; fIdx++) {
         var numFoto = (fIdx + 1) < 10 ? '0' + (fIdx + 1) : (fIdx + 1);
         var tagCode = 'FOTO ' + prefix + numFoto;
-        var fData = (ai.fotos && ai.fotos[fIdx]) ? ai.fotos[fIdx] : { titulo: 'Registro do Ambiente', descricao: 'Vista técnica do elemento vistoriado.', avaria: false };
+        var fData = ai.fotos[fIdx];
 
         if (fData.avaria) tagCode += ' - ATENÇÃO';
 
@@ -2017,10 +2009,10 @@
               '<img src="' + data.photos[fIdx] + '">' +
             '</div>' +
             '<div class="foto-tag-title">' +
-              '<span>' + fData.titulo + '</span>' +
+              '<span>' + escapeHtml(fData.titulo) + '</span>' +
               '<span class="foto-badge-num">' + tagCode + ' (' + (fIdx + 1) + '/' + totalFotos + ')</span>' +
             '</div>' +
-            '<div class="foto-tag-desc">' + fData.descricao + '</div>' +
+            '<div class="foto-tag-desc">' + escapeHtml(fData.descricao) + '</div>' +
           '</div>';
       }
 
@@ -2071,7 +2063,6 @@
         var sData = roomsData[sName];
         var sAi = sData.aiAnalysis;
         var sPrefix = getRoomPrefix(sName);
-        var elMain = (sAi.elementos && sAi.elementos[0]) ? sAi.elementos[0] : { elemento: sName, descricao: 'Item vistoriado.', funcionamento: 'Em ordem', classificacao: 'BOM ESTADO APARENTE' };
         var photoSrc = (sData.photos && sData.photos[0]) ? sData.photos[0] : null;
 
         specialHtml += 
@@ -2087,11 +2078,8 @@
                   '</tr>' +
                 '</thead>' +
                 '<tbody>' +
-                  '<tr>' +
-                    '<td><strong>' + sName + '</strong></td>' +
-                    '<td>' + elMain.descricao + '</td>' +
-                    '<td><span class="' + (sData.unavailable ? 'classif-atencao' : 'classif-bom') + '">' + elMain.classificacao + '</span></td>' +
-                  '</tr>' +
+                  sAi.elementos.map(el => '<tr><td><strong>' + escapeHtml(el.elemento) + '</strong></td><td>' +
+                    escapeHtml(el.descricao) + '</td><td>' + escapeHtml(el.classificacao) + '</td></tr>').join('') +
                 '</tbody>' +
               '</table>' +
             '</div>';
@@ -2169,7 +2157,8 @@
 
     selectedRooms.forEach(function(rName) {
       var res = roomsData[rName].aiAnalysis.ressalvas;
-      finalHtml += '<li><strong>' + rName.toUpperCase() + ':</strong> ' + res + '</li>';
+      if (!res) return;
+      finalHtml += '<li><strong>' + rName.toUpperCase() + ':</strong> ' + escapeHtml(res) + '</li>';
     });
 
     finalHtml += 
