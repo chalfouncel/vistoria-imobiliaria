@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vistoria-pro-v4'; // Mudamos para v2 para forçar a quebra do cache antigo
+const CACHE_NAME = 'vistoria-pro-v5'; // Mudamos para v2 para forçar a quebra do cache antigo
 
 self.addEventListener('install', (event) => {
   self.skipWaiting(); // Força o novo Service Worker a assumir imediatamente
