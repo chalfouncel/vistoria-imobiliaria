@@ -573,6 +573,8 @@
         Abrir Câmera Contínua (Tirar Várias Fotos)
       </button>
 
+      <button type="button" id="choosePhotoFolder" hidden onclick="choosePhotoFolder()">Escolher pasta para as fotos</button>
+      <p id="photoDestination" aria-live="polite">Cada captura solicita uma cópia JPEG em Downloads. Você também pode baixar a foto pela miniatura.</p>
       <label for="cameraInput" class="btn btn-gallery" style="margin-top: 6px;">
         📁 Selecionar Fotos da Galeria / Arquivos
       </label>
@@ -1514,6 +1516,13 @@
           <span style="position:absolute;bottom:2px;right:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;">#${idx+1}</span>
           <button type="button" class="photo-delete-btn" onclick="removePhoto(${idx})" title="Excluir foto">🗑️</button>
         `;
+        var download = document.createElement('a');
+        download.href = src;
+        download.download = photoFilename(room, idx + 1);
+        download.textContent = 'Baixar';
+        download.setAttribute('aria-label', 'Baixar foto ' + (idx + 1));
+        download.style.cssText = 'position:absolute;bottom:2px;left:2px;background:white;color:#152535;padding:3px;font-size:12px;';
+        card.appendChild(download);
         gallery.appendChild(card);
       });
 
@@ -1607,6 +1616,46 @@
     updatePhotosUI();
   }
 
+  var photoFolder = null;
+  var folderButton = document.getElementById('choosePhotoFolder');
+  folderButton.hidden = typeof window.showDirectoryPicker !== 'function';
+
+  async function choosePhotoFolder() {
+    try {
+      photoFolder = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'pictures' });
+      document.getElementById('photoDestination').textContent = 'Nesta sessão, cada captura será copiada para ' + photoFolder.name + '.';
+    } catch (err) {
+      if (err.name !== 'AbortError') alert('Não foi possível selecionar a pasta. O destino anterior continua ativo.');
+    }
+  }
+
+  function photoFilename(room, number) {
+    var label = room.replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 60);
+    var stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return 'Vistoria-' + label + '-' + number + '-' + stamp + '.jpg';
+  }
+
+  async function copyCapturedPhoto(src, name) {
+    try {
+      if (photoFolder) {
+        var blob = await (await fetch(src)).blob();
+        var file = await photoFolder.getFileHandle(name, { create: true });
+        var writer = await file.createWritable();
+        await writer.write(blob);
+        await writer.close();
+      } else {
+        var link = document.createElement('a');
+        link.href = src;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    } catch (err) {
+      alert('Falha ao copiar a foto para o aparelho. Use Baixar na miniatura do cômodo.');
+    }
+  }
+
   function captureContinuousPhoto() {
     if (!videoFeed.videoWidth) return;
 
@@ -1623,6 +1672,7 @@
     var room = selectedRooms[currentRoomIndex];
     roomsData[room].unavailable = false;
     roomsData[room].photos.push(dataUrl);
+    copyCapturedPhoto(dataUrl, photoFilename(room, roomsData[room].photos.length));
     roomsData[room].aiAnalysis = null;
     delete roomAiPromises[room];
     salvarRascunhoLocal();
