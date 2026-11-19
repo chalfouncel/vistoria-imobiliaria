@@ -577,10 +577,12 @@
       <details id="containerLinkHD"><summary>Pasta das fotos no Google Drive</summary>
         <input type="url" id="linkFotosHD" aria-label="Pasta do contrato no Google Drive" placeholder="Cole o link da pasta do contrato">
       </details>
-      <small id="photoDestination" role="status" aria-live="polite"></small>
+      <div class="contagem-drive"></div><div class="contagem-ia"></div><small id="photoDestination" role="status" aria-live="polite"></small>
       <label for="cameraInput" class="btn btn-gallery" style="margin-top: 6px;">
         📁 Selecionar Fotos da Galeria / Arquivos
       </label>
+      <label class="btn btn-gallery" for="nativeStill">Usar câmera do celular</label>
+      <input id="nativeStill" type="file" accept="image/*" capture="environment" hidden>
       <input type="file" id="cameraInput" accept="image/*" multiple>
 
       <button type="button" id="btnToggleUnavailable" class="btn btn-not-available" style="display:none;" onclick="toggleRoomUnavailable()">
@@ -614,7 +616,7 @@
   </div>
 
   <!-- ETAPA 4: LAUDO PRONTO & COMPARTILHAMENTO -->
-  <div id="step-final" class="step"><p id="finalDriveStatus" role="status"></p>
+  <div id="step-final" class="step"><div class="contagem-drive"></div><div class="contagem-ia"></div><p id="finalDriveStatus" role="status"></p>
     <div class="card" style="text-align:center;">
       <h2 style="justify-content:center; color:#28a745;">✓ Laudo Pericial Gerado com Sucesso!</h2>
       <p style="font-size:0.85rem; color:#555; margin:10px 0;">O Laudo de Vistoria foi auditado pela IA e diagramado no padrão pericial A4 sem páginas cortadas.</p>
@@ -652,6 +654,7 @@
     <video id="cameraFeed" autoplay playsinline muted></video>
   </div>
 
+  <div style="background:#17212b;color:white;padding:6px;text-align:center"><label id="lensControls" hidden>Zoom <input id="lensZoom" type="range" aria-label="Zoom da câmera"> <output id="lensValue"></output></label> <small id="stillInfo" role="status"></small></div>
   <div class="cam-bottom-bar">
     <button type="button" class="btn" style="width:auto; padding:8px 12px; background:#334155; color:#fff; font-size:0.85rem;" onclick="closeContinuousCamera()">
       ✕ Concluir Cômodo
@@ -685,6 +688,7 @@
   async function checkUserSubscription(user) {
     driveOwner = user?.email?.toLowerCase() === 'chalfouncorretor@gmail.com' ? user.id : null;
     document.getElementById('containerLinkHD').hidden = !driveOwner;
+    setTimeout(atualizarContagemDrive, 0);
     if (driveOwner) setTimeout(drainPhotoQueue, 0);
     if (!user) {
       authOverlay.style.display = 'flex';
@@ -1521,25 +1525,83 @@
     }
   }
 
-  function dispararAnaliseBackground(roomName) {
-    var rData = roomsData[roomName];
-    if (!rData || rData.unavailable) return;
-    var min = getMinPhotosForRoom(roomName);
-    if (!rData.photos || rData.photos.length < min) return;
-    if (rData.aiAnalysis || roomAiPromises[roomName]) return;
+  let filaIa = Promise.resolve();
+  let atividadeIa = '';
+  function mostrarIa() {
+    const ativos = selectedRooms.filter(nome => roomsData[nome] && !roomsData[nome].unavailable);
+    const prontos = ativos.filter(nome => roomsData[nome].aiAnalysis).length;
+    document.querySelectorAll('.contagem-ia').forEach(el => {
+      el.textContent = 'IA: ' + prontos + ' de ' + ativos.length + ' analisado(s).' + (atividadeIa ? ' ' + atividadeIa : '');
+    });
+  }
 
-    const pending = callGeminiPericialIndividual(roomName, rData.photos, rData.note)
-      .then(function(res) {
-        if (roomAiPromises[roomName] !== pending) return;
-        rData.aiAnalysis = res;
-        salvarRascunhoLocal();
-        return res;
-      })
-      .catch(function(err) {
-        console.warn('Background IA falhou para ' + roomName + ', tentará novamente no final:', err);
-        if (roomAiPromises[roomName] === pending) delete roomAiPromises[roomName];
-      });
-    roomAiPromises[roomName] = pending;
+  function agendarIa(room) {
+    const data = roomsData[room];
+    if (data.aiAnalysis) return Promise.resolve(data.aiAnalysis);
+    if (roomAiPromises[room]) return roomAiPromises[room];
+    const atual = () => roomsData[room] === data && roomAiPromises[room] === tarefa && !data.unavailable;
+    const tarefa = filaIa.then(async () => {
+      if (!atual()) return;
+      const fotos = data.photos.slice();
+      const nota = data.note || '';
+      const resultados = [];
+      const cache = data.lotesIa || (data.lotesIa = []);
+      for (let i = 0; i < fotos.length; i += 3) {
+        if (!atual()) return;
+        const lote = fotos.slice(i,i+3);
+        const bytes = new TextEncoder().encode(JSON.stringify([room,nota,lote]));
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),
+          n => n.toString(16).padStart(2,'0')).join('');
+        const pos = i / 3;
+        if (cache[pos]?.hash !== hash) {
+          for (let tentativa = 0; ; tentativa++) {
+            if (!atual()) return;
+            atividadeIa = room + ' · lote ' + (pos+1) + '/' + Math.ceil(fotos.length/3);
+            mostrarIa();
+            try {
+              const resposta = await callGeminiPericialIndividual(room,lote,nota);
+              if (!atual()) return;
+              cache[pos] = {hash, resposta};
+              await salvarRascunhoLocal();
+              break;
+            } catch (erro) {
+              if (!erro.espera || tentativa >= 2) throw erro;
+              atividadeIa = room + ' · aguardando ' + erro.espera + ' s pelo limite da IA.';
+              mostrarIa();
+              await new Promise(resolve => setTimeout(resolve,erro.espera*1000));
+            }
+          }
+        }
+        resultados.push(cache[pos].resposta);
+      }
+      if (!atual()) return;
+      const final = {versaoEvidencia:1, fotos:[], elementos:[], introducao:'', ressalvas:''};
+      for (const lote of resultados) {
+        const offset = final.fotos.length;
+        for (const el of lote.elementos) {
+          const foto = offset + el.foto;
+          final.elementos.push({...el, foto, elemento:el.elemento.replace(/ \(foto \d+\)$/,' (foto '+foto+')')});
+        }
+        final.fotos.push(...lote.fotos);
+      }
+      for (const campo of ['introducao','ressalvas']) final[campo] = resultados.map(r=>r[campo]).filter(Boolean).join(' ');
+      data.aiAnalysis = final;
+      await salvarRascunhoLocal();
+      return final;
+    }).finally(() => {
+      if (roomAiPromises[room] === tarefa) delete roomAiPromises[room];
+      atividadeIa = '';
+      mostrarIa();
+    });
+    roomAiPromises[room] = tarefa;
+    filaIa = tarefa.catch(() => {});
+    return tarefa;
+  }
+  function dispararAnaliseBackground(room) {
+    const data = roomsData[room];
+    if (data && !data.unavailable && data.photos.length >= getMinPhotosForRoom(room)) {
+      agendarIa(room).catch(err => console.warn('Análise pendente:',room,err.message));
+    }
   }
 
   function jumpToRoom(indexStr) {
@@ -1571,6 +1633,7 @@
   }
 
   function renderCurrentRoom() {
+    atualizarIndicadores();
     var room = selectedRooms[currentRoomIndex];
     var isSpecial = isSpecialItem(room);
     var badgeEl = document.getElementById('roomBadge');
@@ -1723,6 +1786,33 @@
     }
   }
 
+  const zoomInput = document.getElementById('lensZoom');
+  function showZoom(track) {
+    const value = track.getSettings().zoom;
+    if (Number.isFinite(value)) {
+      zoomInput.value = value;
+      document.getElementById('lensValue').textContent = value.toLocaleString('pt-BR') + '×';
+    }
+  }
+
+  async function setLensZoom(track, value) {
+    zoomInput.disabled = true;
+    try {
+      await track.applyConstraints({advanced:[{zoom:value}]});
+    } catch {
+      if (track.readyState === 'live') document.getElementById('stillInfo').textContent = 'Zoom indisponível nesta lente.';
+    } finally {
+      if (track === cameraStream?.getVideoTracks()[0]) {
+        showZoom(track);
+        zoomInput.disabled = false;
+      }
+    }
+  }
+  zoomInput.addEventListener('change', () => {
+    const track = cameraStream?.getVideoTracks()[0];
+    if (track) setLensZoom(track,Number(zoomInput.value));
+  });
+
   async function openContinuousCamera() {
     if (driveOwner && !captureDestination()) return;
     var room = selectedRooms[currentRoomIndex];
@@ -1735,6 +1825,8 @@
     if (btnTorch) { btnTorch.style.background = '#334155'; btnTorch.style.color = '#fff'; }
     updateCamModalCounter();
 
+    document.getElementById("lensControls").hidden = true;
+    document.getElementById("stillInfo").textContent = "";
     cameraModal.style.display = 'flex';
 
     try {
@@ -1743,10 +1835,19 @@
         audio: false
       });
       videoFeed.srcObject = cameraStream;
+      const track = cameraStream.getVideoTracks()[0];
+      const range = track.getCapabilities?.().zoom;
+      if (range && range.max > range.min) {
+        zoomInput.min = range.min; zoomInput.max = range.max; zoomInput.step = range.step || "any";
+        document.getElementById("lensControls").hidden = false;
+        const target = Math.min(range.max,Math.max(range.min,0.6));
+        const initial = range.step ? range.min + Math.round((target-range.min)/range.step)*range.step : target;
+        await setLensZoom(track, Math.min(range.max,initial));
+      }
     } catch (err) {
       console.warn("Falha no getUserMedia direto, acionando fallback de arquivo:", err);
       closeContinuousCamera();
-      document.getElementById('cameraInput').click();
+      document.getElementById('nativeStill').click();
     }
   }
 
@@ -1779,7 +1880,25 @@
     document.getElementById('linkFotosHD').focus();
   }
 
+  async function atualizarContagemDrive() {
+    const owner = driveOwner, folder = contractFolder();
+    let label = '';
+    if (owner && folder) {
+      try {
+        const n = await queueAction('readonly', s => s.index('ownerFolder').count([owner,folder]));
+        label = 'Drive: ' + n + ' pendente(s) na pasta deste contrato.';
+      } catch { label = 'Drive: contagem indisponível.'; }
+    }
+    if (owner === driveOwner && folder === contractFolder()) {
+      document.querySelectorAll('.contagem-drive').forEach(el => el.textContent = label);
+    }
+  }
+  function atualizarIndicadores() {
+    atualizarContagemDrive();
+    mostrarIa();
+  }
   function driveStatus(message) {
+    atualizarContagemDrive();
     document.getElementById('photoDestination').textContent = message;
     document.getElementById('finalDriveStatus').textContent = message;
   }
@@ -1787,8 +1906,14 @@
   let queueDb;
   function photoQueue() {
     if (!queueDb) queueDb = new Promise((resolve,reject) => {
-      const req = indexedDB.open('VistoriaDriveUploads',1);
-      req.onupgradeneeded = () => req.result.createObjectStore('photos',{keyPath:'job'}).createIndex('owner','owner');
+      const req = indexedDB.open('VistoriaDriveUploads',2);
+      req.onupgradeneeded = () => {
+        const store = req.result.objectStoreNames.contains('photos')
+          ? req.transaction.objectStore('photos') : req.result.createObjectStore('photos',{keyPath:'job'});
+        if (!store.indexNames.contains('owner')) store.createIndex('owner','owner');
+        store.createIndex('ownerFolder',['owner','folder']);
+      };
+      req.onblocked = () => driveStatus('Feche as outras abas da vistoria para atualizar a fila.');
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => { queueDb = null; reject(req.error); };
     });
@@ -1843,6 +1968,7 @@
           if (item.pdf || item.original) await sendDriveFile(item,session);
           else await driveRequest({...base,id:item.id,name:item.name,jpeg:item.jpeg},session);
           await queueAction('readwrite',s=>s.delete(item.job));
+          atualizarContagemDrive();
           sent++;
         } catch (err) {
           remaining++;
@@ -1929,10 +2055,16 @@
     let bitmap;
     try {
       let original;
-      if (destination && track && typeof ImageCapture !== 'undefined' && typeof createImageBitmap === 'function') {
+      if (track && typeof ImageCapture !== 'undefined' && typeof createImageBitmap === 'function') {
         try {
           const camera = new ImageCapture(track);
-          original = await camera.takePhoto();
+          let caps;
+          try { caps = await camera.getPhotoCapabilities(); } catch {}
+          if (caps?.imageWidth?.min <= 4000 && caps.imageWidth.max >= 4000 &&
+              caps?.imageHeight?.min <= 3000 && caps.imageHeight.max >= 3000) {
+            try { original = await camera.takePhoto({imageWidth:4000,imageHeight:3000}); } catch {}
+          }
+          if (!original) original = await camera.takePhoto();
           bitmap = await createImageBitmap(original);
         } catch { /* Se a captura funcionou, preserve o original mesmo sem prévia decodificada. */ }
       }
@@ -1947,6 +2079,9 @@
         source = frame;
         original = await new Promise((ok,fail)=>frame.toBlob(blob=>blob ? ok(blob) : fail(Error('Falha na captura.')), 'image/png'));
       }
+      document.getElementById('stillInfo').textContent = bitmap || !original
+        ? 'Captura: ' + width + ' × ' + height + ' px'
+        : 'Foto capturada pela câmera.';
       const preview = document.createElement('canvas');
       const scale = Math.min(1,1600/Math.max(width,height));
       preview.width = Math.round(width*scale); preview.height = Math.round(height*scale);
@@ -1989,11 +2124,11 @@
 
   /* Upload normal/fallback */
   var cameraInput = document.getElementById('cameraInput');
-  cameraInput.addEventListener('change', function(e) {
+  for (const input of [cameraInput,document.getElementById('nativeStill')]) input.addEventListener('change', function(e) {
     var files = Array.from(e.target.files);
     if (!files.length) return;
     const destination = captureDestination();
-    if (driveOwner && !destination) { cameraInput.value=''; return; }
+    if (driveOwner && !destination) { e.target.value=''; return; }
     const room = selectedRooms[currentRoomIndex];
 
     files.forEach(function(file) {
@@ -2023,7 +2158,7 @@
       };
       reader.readAsDataURL(file);
     });
-    cameraInput.value = '';
+    e.target.value = '';
   });
 
   function handlePrevRoom() {
@@ -2059,7 +2194,9 @@
 
     if (!response.ok) {
       var errData = await response.json().catch(function(){ return {}; });
-      throw new Error(errData.error || ('Erro no servidor HTTP ' + response.status));
+      const erro = new Error(errData.error || ('Erro no servidor HTTP ' + response.status));
+      if (response.status === 429) erro.espera = Math.max(1,Math.ceil(Number(response.headers.get('Retry-After')) || 60));
+      throw erro;
     }
 
     var result = await response.json();
@@ -2111,7 +2248,7 @@
       if (aiText) aiText.innerText = 'Iniciando análise com IA (0%)...';
 
       var fila = selectedRooms.slice();
-      var CONCORRENCIA_MAX = 2;
+      var CONCORRENCIA_MAX = 1;
 
       async function processarFila() {
         while (fila.length > 0) {
@@ -2132,12 +2269,7 @@
             updateProgress('Já analisado em 2º plano: ' + room);
             continue;
           }
-          if (roomAiPromises[room]) {
-            rData.aiAnalysis = await roomAiPromises[room];
-          }
-          if (!rData.aiAnalysis) {
-            rData.aiAnalysis = await callGeminiPericialIndividual(room, rData.photos, rData.note);
-          }
+          if (!await agendarIa(room)) throw new Error('O cômodo foi alterado durante a análise: '+room);
           updateProgress('Analisado: ' + room);
         }
       }
